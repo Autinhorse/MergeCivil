@@ -1,7 +1,7 @@
 // v10 规则：纯逻辑，不碰界面。数值全部来自 ./data。
 import {
   CORE, CORE_LEVELS, ERAS, RES_INFO, FAMILIES, FAMILY, FOOTPRINTS, MATERIALS, MERGE, RES_KEYS, RULES,
-  META_SHOP, materialsOfEra, rowOf, nameOf, type ResKey, type Row,
+  META_SHOP, materialsOfEra, rowOf, lv1Row, nameOf, type ResKey, type Row,
 } from './data';
 
 export interface Spot { x: number; y: number; w: number; h: number }
@@ -53,6 +53,7 @@ export interface State {
 export interface Economy {
   mult: number;
   foodProd: number; foodNeed: number; hungry: number;
+  goodsProd: number; goodsNeed: number; goodsShort: number;
   housing: number; homeless: number;
   happyProd: number; happyBuildings: number; happyNeed: number; happyPenalty: number; happy: number; happyRatio: number;
   settled: number;
@@ -83,7 +84,7 @@ export const apPerTurn = (s: State) => RULES.apBase + RULES.apPerEra * (s.era - 
 /** 第 turn 回合的人口增长 = 固定部分 + 按回合加的部分 + 当前人口 × popRate（按比例增长） */
 export const popGrowth = (turn: number, pop = 0) => RULES.popBase + RULES.popPerTurn * turn + RULES.popRate * pop;
 export const core = (s: State) => s.buildings.find((b) => b.core)!;
-export const rowOfB = (b: Building): Row => (b.core ? { housing: CORE_LEVELS[b.lvl].housing } : rowOf(b.fam, b.lvl));
+export const rowOfB = (b: Building): Row => (b.core ? { housing: CORE_LEVELS[b.lvl].housing, happy: CORE_LEVELS[b.lvl].housing * RULES.coreHappy } : rowOf(b.fam, b.lvl));
 export const nameOfB = (b: Building) => (b.core ? CORE_LEVELS[b.lvl].name : nameOf(b.fam, b.lvl));
 export const byId = (s: State, id: number) => s.buildings.find((b) => b.id === id);
 export const shownMaterials = (s: State) => materialsOfEra(s.era);
@@ -391,21 +392,36 @@ export function releaseWarehouse(s: State) {
 // ---------- 选卡 ----------
 
 export const cardItems = (c: Card): Item[] => (c.kind === 'mixed' ? c.items : Array.from({ length: c.count }, () => ({ fam: c.fam, lvl: c.lvl })));
-export const itemValue = (it: Item) => Math.pow(MERGE.count, it.lvl - 1);
+export const itemValue = (it: Item) => Math.pow(MERGE.count, it.lvl - baseLevel(it.fam));
 export const cardValue = (c: Card) => cardItems(c).reduce((a, it) => a + itemValue(it), 0);
-export const pool = (s: State) => FAMILIES.filter((f) => f.era <= s.era);
+export const pool = (s: State) => FAMILIES.filter((f) => f.era <= s.era && f.start <= levelCap(s));
+/** 这种建筑在卡里发几级：至少是它的起始级别 */
+/** 起始级别高的链：relStart 开着时，起始级别那一级只顶 1 座 Lv1（产出、价值都从起始级别开始算），发卡等级跟着往上挪 */
+export const baseLevel = (fam: string) => (RULES.relStart ? FAMILY[fam]?.start ?? 1 : 1);
+export const famLevel = (s: State, fam: string, lvl: number) => {
+  const st = FAMILY[fam]?.start ?? 1;
+  return RULES.relStart ? Math.max(st, Math.min(levelCap(s), st + lvl - 1)) : Math.max(lvl, st);
+};
+/** 每人生活用品需求（goodsFromEra 时代以前不要） */
+export const goodsPerPerson = (s: State) => (s.era >= RULES.goodsFromEra ? RULES.goodsBase + RULES.goodsPerTurn * s.turn : 0);
 
 /** 未来 needHorizon 回合的各项缺口，换算成“还差几座 Lv1 该种建筑” */
-export function needs(s: State): { fam: string; lv1: number; reason: string }[] {
+export function needs(s: State): { fam: string; lv1: number; reason: string; lvl: number }[] {
   let future = s.pop;
   for (let t = 0; t < Math.max(RULES.needHorizon, RULES.turnsPerRound); t++) future += popGrowth(s.turn + t, future);
   const e = economy(s, future);
-  const out: { fam: string; lv1: number; reason: string }[] = [];
+  const out: { fam: string; lv1: number; reason: string; lvl: number }[] = [];
+  const cardLvl = bundleLevel(s, arrivalValue(s));
   const add = (key: keyof Row, gap: number, reason: string) => {
     if (gap <= 0) return;
     for (const f of pool(s)) {
-      const v = f.row[key] ?? 0;
-      if (v > 0) out.push({ fam: f.id, lv1: gap / v, reason });
+      // 换产出的链（伐木场 Lv8 起产煤）：这一级不产就往上找第一个产的等级，直接发那一级
+      // 换产出的链（伐木场 Lv8 起产煤）：这一级不产就看往上第一个产的等级，但还是发卡片等级（玩家自己往上合）
+      const L0 = famLevel(s, f.id, cardLvl);
+      for (let L = L0; L <= levelCap(s); L++) {
+        const v = lv1Row(f.id, L)[key] ?? 0;
+        if (v > 0) { out.push({ fam: f.id, lv1: gap / v, reason, lvl: RULES.stageJump ? L : L0 }); break; }
+      }
     }
   };
   // 住房、粮食、幸福：目标 = 需求 × needMargin（留一点富余）。都够了的话，就补“富余比例最低”的那一项，免得一直发同一种
@@ -415,6 +431,7 @@ export function needs(s: State): { fam: string; lv1: number; reason: string }[] 
     ['food', e.foodNeed, e.foodProd, '粮食'],
     ['happy', e.happyNeed - e.happyBuildings, e.happyProd, '幸福'],
   ];
+  if (e.goodsNeed > 0) cats.push(['goods', e.goodsNeed, e.goodsProd, '生活用品']);
   for (const [k, dem, sup, why] of cats) add(k, dem * M - sup, why);
   if (!out.length) {
     const [k, dem, , why] = cats.reduce((a, b) => (b[2] / Math.max(1, b[1]) < a[2] / Math.max(1, a[1]) ? b : a));
@@ -422,7 +439,7 @@ export function needs(s: State): { fam: string; lv1: number; reason: string }[] 
   }
   // 补上面这些缺口的建筑自己也要吃原料（祭坛吃木）：按吃得最多的那种算进原料缺口
   const implied: Partial<Record<ResKey, number>> = {};
-  for (const n of out) for (const [k, v] of Object.entries(FAMILY[n.fam].row)) if ((MATERIALS as string[]).includes(k) && v! < 0) implied[k as ResKey] = Math.max(implied[k as ResKey] ?? 0, n.lv1 * -v!);
+  for (const n of out) for (const [k, v] of Object.entries(lv1Row(n.fam, n.lvl))) if ((MATERIALS as string[]).includes(k) && v! < 0) implied[k as ResKey] = Math.max(implied[k as ResKey] ?? 0, n.lv1 * -v!);
   // 原料：净缺口；库存撑不过 3 回合时按整个缺口算，否则减半
   for (const k of MATERIALS) {
     const gap = e.matDemand[k] - e.matProd[k] + (implied[k] ?? 0) - Math.max(0, s.res[k]) / 10;
@@ -432,7 +449,7 @@ export function needs(s: State): { fam: string; lv1: number; reason: string }[] 
   const next = CORE_LEVELS[s.coreLevel + 1];
   if (next?.cost) for (const [k, v] of Object.entries(next.cost) as [ResKey, number][]) if (s.res[k] < v) add(k, Math.max(1, (v - s.res[k]) / (e.settled >= next.settled * 0.7 ? 5 : 20)), `升级·${RES_INFO[k].name}`);
   // 同一种建筑按多个原因合并
-  const m = new Map<string, { fam: string; lv1: number; reason: string }>();
+  const m = new Map<string, { fam: string; lv1: number; reason: string; lvl: number }>();
   for (const n of out) {
     const o = m.get(n.fam);
     if (!o || n.lv1 > o.lv1) m.set(n.fam, n);
@@ -460,7 +477,7 @@ export function genOffer(s: State): Card[] {
   const V = arrivalValue(s);
   const minLvl = RULES.oldLevelFillOnly ? Math.min(levelCap(s), RULES.eraCardLevel[s.era] ?? 1) : 1;
   const lvl = Math.max(minLvl, bundleLevel(s, V));
-  const count = Math.max(1, Math.round(V / Math.pow(MERGE.count, lvl - 1)));
+  const countAt = (fam: string, L: number) => Math.max(1, Math.round(V / Math.pow(MERGE.count, L - baseLevel(fam))));
   /** 旧时代等级只补齐：这种建筑低于 minLvl 的等级里，差几座凑满 3 座就补几座 */
   const fill = (fam: string): Item[] => {
     const out: Item[] = [];
@@ -482,18 +499,23 @@ export function genOffer(s: State): Card[] {
     const fam = n?.fam ?? fams.filter((f) => !used.has(f.id))[Math.floor(r() * Math.max(1, fams.length - used.size))]?.id ?? fams[0].id;
     used.add(fam);
     const f = fill(fam);
-    if (f.length) cards.push({ kind: 'mixed', items: [...f, ...Array.from({ length: count }, () => ({ fam, lvl }))] });
-    else cards.push({ kind: 'bundle', fam, lvl, count, reason: n?.reason ?? '随机' });
+    const L = Math.max(n?.lvl ?? 0, famLevel(s, fam, lvl)), count = countAt(fam, L);
+    if (f.length) cards.push({ kind: 'mixed', items: [...f, ...Array.from({ length: count }, () => ({ fam, lvl: L }))] });
+    else cards.push({ kind: 'bundle', fam, lvl: L, count, reason: n?.reason ?? '随机' });
   }
   // 最后一张：按缺口比例混合
   const items: Item[] = [];
   const w = ns.length ? ns.map((n) => n.lv1) : fams.map(() => 1);
   const ids = ns.length ? ns.map((n) => n.fam) : fams.map((f) => f.id);
+  const lvOf = ns.length ? ns.map((n) => n.lvl) : fams.map(() => 0);
   const total = w.reduce((a, b) => a + b, 0);
-  for (let i = 0; i < count; i++) {
+  // 按价值发：起始级别高的建筑一座顶好几座
+  for (let left = V; left > 0 || !items.length; ) {
     let x = r() * total, k = 0;
     while (k < w.length - 1 && (x -= w[k]) > 0) k++;
-    items.push({ fam: ids[k], lvl });
+    const L = Math.max(lvOf[k], famLevel(s, ids[k], lvl));
+    items.push({ fam: ids[k], lvl: L });
+    left -= itemValue({ fam: ids[k], lvl: L });
   }
   if (minLvl > 1 || RULES.fillRemainders) for (const fam of new Set(items.map((x) => x.fam))) items.unshift(...fill(fam));
   cards.push({ kind: 'mixed', items });
@@ -529,7 +551,7 @@ export function economy(s: State, pop = s.pop): Economy {
   const stock = { ...s.res };
   const matProd = zero(), matDemand = zero(), matUsed = zero();
   const run: Record<number, number> = {};
-  let foodProd = 0, housing = 0, happyProd = 0, happyBuildings = 0;
+  let foodProd = 0, goodsProd = 0, housing = 0, happyProd = 0, happyBuildings = 0;
   const isMat = (k: string) => (MATERIALS as string[]).includes(k);
   const consumers: Building[] = [];
   for (const b of s.buildings) {
@@ -540,13 +562,20 @@ export function economy(s: State, pop = s.pop): Economy {
     for (const [k, v] of Object.entries(row) as [keyof Row, number][]) {
       if (k === 'housing') housing += v;
       else if (k === 'food') foodProd += v * mult;
+      else if (k === 'goods') goodsProd += v * mult;
       else if (k === 'happy') { if (v > 0) happyProd += v * mult; else happyBuildings += v; }
       else if (isMat(k)) { matProd[k as ResKey] += v * mult; stock[k as ResKey] += v * mult; }
     }
   }
   // 分层：产出别人要吃的原料的消费者（电厂）先算
   const producesInput = (b: Building) => Object.entries(rowOfB(b)).some(([k, v]) => isMat(k) && v! > 0);
-  const layers = [consumers.filter(producesInput), consumers.filter((b) => !producesInput(b))];
+  // 用电的产原料建筑（Lv9+ 矿）排在电厂后面；电厂吃的煤不够就先用库存（差一回合）
+  const usesPower = (b: Building) => (rowOfB(b).power ?? 0) < 0;
+  const layers = [
+    consumers.filter((b) => producesInput(b) && !usesPower(b)),
+    consumers.filter((b) => producesInput(b) && usesPower(b)),
+    consumers.filter((b) => !producesInput(b)),
+  ];
   for (const layer of layers) {
     const dem = zero();
     for (const b of layer) for (const [k, v] of Object.entries(rowOfB(b))) if (isMat(k) && v! < 0) dem[k as ResKey] += -v!;
@@ -567,6 +596,7 @@ export function economy(s: State, pop = s.pop): Economy {
         if (isMat(k) && v < 0) stock[k as ResKey] -= -v * r;
         else if (isMat(k) && v > 0) { matProd[k as ResKey] += v * r * mult; stock[k as ResKey] += v * r * mult; }
         else if (k === 'food') foodProd += v * r * mult;
+        else if (k === 'goods') goodsProd += v * r * mult;
         else if (k === 'happy') { if (v > 0) happyProd += v * r * mult; else happyBuildings += v; }
         else if (k === 'housing') housing += v;
       }
@@ -577,13 +607,16 @@ export function economy(s: State, pop = s.pop): Economy {
   const hungry = Math.max(0, pop - fed);
   const homeless = Math.max(0, pop - housing);
   const happyNeed = pop * happyPerPerson(s);
-  const happyPenalty = homeless * RULES.homelessPenalty + hungry * RULES.hungerPenalty;
+  const goodsNeed = pop * goodsPerPerson(s);
+  // 生活用品不够：缺的那部分按“缺几个人的份”扣幸福
+  const goodsShort = goodsNeed > 0 ? Math.max(0, pop * (1 - goodsProd / goodsNeed)) : 0;
+  const happyPenalty = homeless * RULES.homelessPenalty + hungry * RULES.hungerPenalty + goodsShort * RULES.goodsPenalty;
   const happy = happyProd + happyBuildings - happyNeed - happyPenalty;
   const happyRatio = RULES.happyPerPop ? happy / Math.max(1, pop) : happy;
   const settled = Math.floor(Math.min(pop, housing, fed));
   for (const k of MATERIALS) stock[k] = Math.max(0, Math.round(stock[k] * 100) / 100);
   stock.food = 0;
-  return { mult, foodProd, foodNeed, hungry, housing, homeless, happyProd, happyBuildings, happyNeed, happyPenalty, happy, happyRatio, settled, matProd, matDemand, matUsed, run, stockAfter: stock };
+  return { mult, foodProd, foodNeed, hungry, goodsProd, goodsNeed, goodsShort, housing, homeless, happyProd, happyBuildings, happyNeed, happyPenalty, happy, happyRatio, settled, matProd, matDemand, matUsed, run, stockAfter: stock };
 }
 
 /** 村庄中心升级：换大占地；压到的建筑按落地规则挪走（挪不下进仓库） */
@@ -658,6 +691,7 @@ function resolveSmallTurn(s: State): TurnReport {
   const g = s.stats.gapTurns;
   if (e.homeless > 0) g.housing = (g.housing ?? 0) + 1;
   if (e.hungry > 0) g.food = (g.food ?? 0) + 1;
+  if (e.goodsShort > 0) g.goods = (g.goods ?? 0) + 1;
   if (e.happyProd + e.happyBuildings < e.happyNeed) g.happy = (g.happy ?? 0) + 1;
   for (const k of MATERIALS) if (e.matDemand[k] > 0 && e.matUsed[k] < e.matDemand[k] - 1e-6) g[k] = (g[k] ?? 0) + 1;
   // 失败线
