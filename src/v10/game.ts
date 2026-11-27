@@ -447,7 +447,7 @@ export function needs(s: State): { fam: string; lv1: number; reason: string; lvl
   }
   // 村庄中心进入新时代要原料
   const next = CORE_LEVELS[s.coreLevel + 1];
-  if (next?.cost) for (const [k, v] of Object.entries(next.cost) as [ResKey, number][]) if (s.res[k] < v) add(k, Math.max(1, (v - s.res[k]) / (e.settled >= next.settled * 0.7 ? 5 : 20)), `升级·${RES_INFO[k].name}`);
+  if (next?.cost) for (const [k, v] of Object.entries(next.cost) as [ResKey, number][]) if (s.res[k] < v) add(k, Math.max(1, (v - s.res[k]) / (e.settled >= next.settled * (s.coreLevel + 1 >= 3 ? RULES.coreSettledMult : 1) * 0.7 ? 5 : 20)), `升级·${RES_INFO[k].name}`);
   // 同一种建筑按多个原因合并
   const m = new Map<string, { fam: string; lv1: number; reason: string; lvl: number }>();
   for (const n of out) {
@@ -472,11 +472,15 @@ export function bundleLevel(s: State, V: number) {
   return lvl;
 }
 
+/** 后面年代建筑种类多了，卡里多发几座（等级不变）。2026-11-27 Rex 提议：× (1 + arrivalPerFamily × (开放的种类 − 开局种类)) */
+export const arrivalMore = (s: State) => 1 + RULES.arrivalPerFamily * Math.max(0, pool(s).length - RULES.arrivalBaseFamilies);
+
 export function genOffer(s: State): Card[] {
   const r = () => rand(s);
-  const V = arrivalValue(s);
+  const V0 = arrivalValue(s);
   const minLvl = RULES.oldLevelFillOnly ? Math.min(levelCap(s), RULES.eraCardLevel[s.era] ?? 1) : 1;
-  const lvl = Math.max(minLvl, bundleLevel(s, V));
+  const lvl = Math.max(minLvl, bundleLevel(s, V0));
+  const V = V0 * arrivalMore(s);
   const countAt = (fam: string, L: number) => Math.max(1, Math.round(V / Math.pow(MERGE.count, L - baseLevel(fam))));
   /** 旧时代等级只补齐：这种建筑低于 minLvl 的等级里，差几座凑满 3 座就补几座 */
   const fill = (fam: string): Item[] => {
@@ -703,7 +707,7 @@ function resolveSmallTurn(s: State): TurnReport {
   // 村庄中心：安居人口够了、原料够了就自动升级
   let coreUp = false;
   const next = CORE_LEVELS[s.coreLevel + 1];
-  if (!s.over && next && e.settled >= next.settled) {
+  if (!s.over && next && e.settled >= next.settled * (s.coreLevel + 1 >= 3 ? RULES.coreSettledMult : 1)) {
     const cost = next.cost ?? {};
     if ((Object.entries(cost) as [ResKey, number][]).every(([k, v]) => s.res[k] >= v)) {
       for (const [k, v] of Object.entries(cost) as [ResKey, number][]) s.res[k] -= v;

@@ -197,6 +197,7 @@ export const RULES = {
   powerDraw: 0.5,
   // 祭坛从 Lv2 起（新表），开局村庄中心 Lv1 时没有幸福来源：先让村庄中心自带幸福 = 自带住房 × coreHappy（占位）
   coreHappy: 2,
+  coreSettledMult: 1, // 村庄中心 L3 起的升级门槛（安居人口）× 这个数（L2 不变：祭坛 Lv2 才有，开局撑不住），调大 = 升级慢、整局变长
   // 起始级别高的链（银行 Lv7、电厂 Lv9）起始那一级顶 3^((起始级别 − 1) × startScale) 座 Lv1。0 = 顶 1 座，1 = 顶 729 座（Lv7）
   startScale: 0.5,
   // 发卡时缺“换产出才有”的原料（煤要伐木场 Lv8）：true = 直接发那一级；false = 照常发卡片等级，玩家自己合上去
@@ -233,6 +234,8 @@ export const RULES = {
   arrivalPerPop: 1.5,
   needMargin: 1.1, // 发卡时住房/粮食/幸福按需求的几倍算够（原来是 +2）
   needHorizon: 1, // 发卡看几回合以后的缺口（人口按增长推算）；试过 5，早期会饿死，先用 1
+  arrivalPerFamily: 0, // 每多开放一种建筑，卡牌价值多几成（0.1 = 每多一种 +10%）
+  arrivalBaseFamilies: 4, // 开局开放几种（田地、伐木场、住房、采石场）不加
   arrivalMin: 3, // 每张卡至少值几座 Lv1
   bundleMinCount: 3, // 卡里同种建筑至少几座：价值不够就降级发
   // 时代升级后旧时代等级只补齐（2026-11-27 Rex 提议，先做成开关）：
