@@ -20,7 +20,7 @@ if (process.env.SET)
     // CORE.xxx 改村庄中心相关参数（比如 CORE.plotsPerLevel=2），其余改 RULES
     const [obj, k] = k0.startsWith('CORE.') ? [CORE as unknown as Record<string, unknown>, k0.slice(5)] : [R, k0];
     if (!(k in obj)) throw new Error(`没有参数 ${k0}`);
-    obj[k] = v === 'true' ? true : v === 'false' ? false : Number(v);
+    obj[k] = v === 'true' ? true : v === 'false' ? false : isNaN(Number(v)) ? v : Number(v);
   }
 
 // FAMS_OFF=pasture,theatre 去掉某些建筑种类（试“减少建筑种类”）

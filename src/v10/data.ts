@@ -243,6 +243,7 @@ export const RULES = {
   oldLevelFillOnly: false,
   eraCardLevel: [0, 1, 2, 3, 4, 5],
   autoFillGap: 0, // >0 时：比发卡等级低这么多级及以上的零头，每个大回合开始自动补到 3 座（不自动合），之后不再发。Rex 定 3
+  autoFillRef: 'card' as 'card' | 'family', // 'family' = 按这种建筑自己的最高等级算“低几级”
   fillRemainders: false, // 发卡时顺便把同种建筑低等级的零头补到 3 座（凑不齐的低级建筑就能合掉）
   // 仓库：放不下的新建筑进仓库，每回合开始按落地规则自动放出（玩家不能选位置）
   warehouseCells: 6,

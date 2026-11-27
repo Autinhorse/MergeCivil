@@ -214,10 +214,13 @@ export function land(s: State, it: Item, noMerge = false): Building | null {
  */
 export function autoFillLow(s: State) {
   if (!RULES.autoFillGap) return;
-  const top = bundleLevel(s, arrivalValue(s)) - RULES.autoFillGap;
-  if (top < 1) return;
+  // 参照等级：'card' = 比发卡等级低 autoFillGap 级；'family' = 比这种建筑在地图上的最高等级低 autoFillGap 级（Rex：田地到 Lv5，Lv3 就补）
+  const cardTop = bundleLevel(s, arrivalValue(s)) - RULES.autoFillGap;
+  const famMax = new Map<string, number>();
+  for (const b of s.buildings) if (!b.core) famMax.set(b.fam, Math.max(famMax.get(b.fam) ?? 0, b.lvl));
+  const topOf = (fam: string) => (RULES.autoFillRef === 'family' ? (famMax.get(fam) ?? 0) - RULES.autoFillGap : cardTop);
   const cnt = new Map<string, number>();
-  for (const b of s.buildings) if (!b.core && b.lvl <= top) cnt.set(`${b.fam}:${b.lvl}`, (cnt.get(`${b.fam}:${b.lvl}`) ?? 0) + 1);
+  for (const b of s.buildings) if (!b.core && b.lvl <= topOf(b.fam)) cnt.set(`${b.fam}:${b.lvl}`, (cnt.get(`${b.fam}:${b.lvl}`) ?? 0) + 1);
   for (const [k, n] of cnt) {
     const r = n % MERGE.count;
     if (!r) continue;
