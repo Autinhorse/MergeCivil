@@ -6,7 +6,7 @@
 //   BOTS=normal,expert N=40 TURNS=250 npm run sim10
 //   NOINF=1 跳过无限行动力对比；CSV=out.csv 把每局结果写成表
 import { writeFileSync } from 'node:fs';
-import { CORE_LEVELS, ERAS, FAMILY, MATERIALS, MERGE, RES_INFO, RULES } from '../src/v10/data';
+import { CORE, CORE_LEVELS, ERAS, FAMILY, MATERIALS, MERGE, RES_INFO, RULES } from '../src/v10/data';
 import {
   buyPlot, buyablePlots, cardItems, cells, chooseCard, economy, endTurn, fits, freeCells, groupOf, levelCap, moveCost, move, needs,
   newGame, occupancy, ownedCount, plotAp, plotQuota, previewMove, sellWarehouse, touching, type Building, type Card, type State,
@@ -16,9 +16,11 @@ import {
 const R = RULES as unknown as Record<string, unknown>;
 if (process.env.SET)
   for (const kv of process.env.SET.split(',')) {
-    const [k, v] = kv.split('=');
-    if (!(k in R)) throw new Error(`RULES 里没有 ${k}`);
-    R[k] = v === 'true' ? true : v === 'false' ? false : Number(v);
+    const [k0, v] = kv.split('=');
+    // CORE.xxx 改村庄中心相关参数（比如 CORE.plotsPerLevel=2），其余改 RULES
+    const [obj, k] = k0.startsWith('CORE.') ? [CORE as unknown as Record<string, unknown>, k0.slice(5)] : [R, k0];
+    if (!(k in obj)) throw new Error(`没有参数 ${k0}`);
+    obj[k] = v === 'true' ? true : v === 'false' ? false : Number(v);
   }
 
 type Bot = 'novice' | 'normal' | 'expert';
@@ -264,6 +266,8 @@ function summary(rs: Result[], label: string) {
   console.log(`  大回合结束时（每 ${RULES.turnsPerRound} 小回合一次，平均每局 ${f1(roundsTotal / rs.length)} 个大回合）：还有能合的但行动力不够 ${er('ap')}，没有挪 1 座就能合的了 ${er('none')}（这时平均还剩 ${f1(rs.reduce((a, r) => a + r.endReason.apLeftWhenNone, 0) / Math.max(1, noneTurns))} 点行动力），其他 ${er('other')}`);
   const maxL = Math.max(...rs.map((r) => r.lvHist.length - 1));
   console.log(`  局末各级建筑数量（平均）：${Array.from({ length: maxL }, (_, i) => i + 1).map((L) => `Lv${L} ${f1(avg(rs.map((r) => r.lvHist[L] ?? 0)))}`).join('，')}；共 ${f1(avg(rs.map((r) => r.buildings)))} 座，空格 ${f1(avg(rs.map((r) => r.freeCells)))}`);
+  const top = rs.map((r) => Math.max(0, ...Object.values(r.maxLv)));
+  console.log(`  局末最高建筑等级：平均 Lv${f1(avg(top))}，合到 Lv8+ 的局 ${top.filter((x) => x >= 8).length}/${rs.length}，Lv10+ 的局 ${top.filter((x) => x >= 10).length}/${rs.length}`);
   const fams = [...new Set(rs.flatMap((r) => Object.keys(r.maxLv)))];
   console.log(`  结束时各类建筑最高等级（平均 / 最高）：${fams.map((f) => { const xs = rs.map((r) => r.maxLv[f] ?? 0); return `${FAMILY[f].name} ${f1(avg(xs))}/${Math.max(...xs)}`; }).join('，')}`);
   const dead = rs.filter((r) => r.died);
