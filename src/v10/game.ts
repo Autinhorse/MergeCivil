@@ -443,7 +443,9 @@ export function genOffer(s: State): Card[] {
   /** 旧时代等级只补齐：这种建筑低于 minLvl 的等级里，差几座凑满 3 座就补几座 */
   const fill = (fam: string): Item[] => {
     const out: Item[] = [];
-    for (let L = 1; L < minLvl; L++) {
+    // fillRemainders：比这张卡等级低的各级，差几座凑满 3 座就补几座（不管时代）
+    const upTo = RULES.fillRemainders ? lvl : minLvl;
+    for (let L = 1; L < upTo; L++) {
       const n = s.buildings.filter((b) => !b.core && b.fam === fam && b.lvl === L).length % MERGE.count;
       if (n > 0) for (let i = n; i < MERGE.count; i++) out.push({ fam, lvl: L });
     }
@@ -472,7 +474,7 @@ export function genOffer(s: State): Card[] {
     while (k < w.length - 1 && (x -= w[k]) > 0) k++;
     items.push({ fam: ids[k], lvl });
   }
-  if (minLvl > 1) for (const fam of new Set(items.map((x) => x.fam))) items.unshift(...fill(fam));
+  if (minLvl > 1 || RULES.fillRemainders) for (const fam of new Set(items.map((x) => x.fam))) items.unshift(...fill(fam));
   cards.push({ kind: 'mixed', items });
   return cards;
 }

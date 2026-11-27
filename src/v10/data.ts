@@ -185,6 +185,7 @@ export const RULES = {
   // 开着时，每个时代发卡的最低等级 = eraCardLevel[时代]；低于它的等级只补到凑满 3 座为止，之后不再发
   oldLevelFillOnly: false,
   eraCardLevel: [0, 1, 2, 3, 4, 5],
+  fillRemainders: false, // 发卡时顺便把同种建筑低等级的零头补到 3 座（凑不齐的低级建筑就能合掉）
   // 仓库：放不下的新建筑进仓库，每回合开始按落地规则自动放出（玩家不能选位置）
   warehouseCells: 6,
   sellRatio: 0.5, // 卖出返还 = max(sellMin, floor(格数 × sellRatio))；应低于合并返还
