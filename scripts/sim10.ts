@@ -8,7 +8,7 @@
 import { writeFileSync } from 'node:fs';
 import { CORE, CORE_LEVELS, ERAS, FAMILIES, FAMILY, MATERIALS, MERGE, RES_INFO, RULES, startBase } from '../src/v10/data';
 import {
-  buyPlot, buyablePlots, cardItems, cells, chooseCard, economy, endTurn, fits, freeCells, groupOf, levelCap, moveCost, move, needs,
+  buyPlot, buyablePlots, cardItems, hooks, footprint, ownedBounds, byId, cellOwned, type Item, cells, chooseCard, economy, endTurn, fits, freeCells, groupOf, levelCap, moveCost, move, needs,
   newGame, occupancy, ownedCount, plotAp, plotQuota, previewMove, sellWarehouse, touching, type Building, type Card, type State,
 } from '../src/v10/game';
 
@@ -193,7 +193,80 @@ interface Result {
   cause: string; deathMix: Record<string, number>;
 }
 
+/**
+ * 腾位置（2026-11-27 Rex）：新建筑放不下时，找一块 w×h 的地方，把压在上面的小建筑挪到别处空地，
+ * 行动力 = 被挪建筑的格数。选总花费最少、行动力付得起的那块。只挪普通建筑，不挪村庄中心。
+ */
+const MAKE_ROOM = process.env.MAKE_ROOM !== '0';
+function makeRoom(s: State, it: Item): boolean {
+  const roomStats = ((s.stats as unknown as { room?: Record<string, number> }).room ??= { tries: 0, ok: 0, moved: 0, ap: 0 });
+  roomStats.tries++;
+  if (s.ap <= 0) return false;
+  const [w0, h0] = footprint(it.lvl);
+  const shapes = w0 === h0 ? [[w0, h0]] : [[w0, h0], [h0, w0]];
+  const bd = ownedBounds(s);
+  const N = s.size;
+  const occ = new Int32Array(N * N);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (!cellOwned(s, x, y)) occ[y * N + x] = -2;
+  for (const b of s.buildings) for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) occ[y * N + x] = b.id;
+  const cost = new Map(s.buildings.map((b) => [b.id, b.core ? Infinity : moveCost(b)]));
+  // 1) 列出所有候选块和它的花费（被压建筑格数），按花费从小到大
+  const cands: { x: number; y: number; w: number; h: number; c: number; ids: number[] }[] = [];
+  for (const [w, h] of shapes)
+    for (let y = bd.y0; y <= bd.y0 + bd.h - h; y++)
+      for (let x = bd.x0; x <= bd.x0 + bd.w - w; x++) {
+        const ids = new Set<number>();
+        let c = 0, ok = true;
+        for (let yy = y; yy < y + h && ok; yy++)
+          for (let xx = x; xx < x + w; xx++) {
+            const id = occ[yy * N + xx];
+            if (id === -2) { ok = false; break; }
+            if (id && !ids.has(id)) { ids.add(id); c += cost.get(id)!; if (c > s.ap) { ok = false; break; } }
+          }
+        if (ok && ids.size) cands.push({ x, y, w, h, c, ids: [...ids] });
+      }
+  cands.sort((a, b) => a.c - b.c);
+  // 2) 从便宜的试起：被挪的建筑都要在这块以外找到空地
+  const free = (o: Int32Array, x: number, y: number, w: number, h: number) => {
+    for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) if (o[yy * N + xx]) return false;
+    return true;
+  };
+  for (const cd of cands.slice(0, 40)) {
+    const o2 = occ.slice();
+    for (const id of cd.ids) { const b = byId(s, id)!; for (let yy = b.y; yy < b.y + b.h; yy++) for (let xx = b.x; xx < b.x + b.w; xx++) o2[yy * N + xx] = 0; }
+    for (let yy = cd.y; yy < cd.y + cd.h; yy++) for (let xx = cd.x; xx < cd.x + cd.w; xx++) o2[yy * N + xx] = -1;
+    const plan: { id: number; x: number; y: number; rot: boolean }[] = [];
+    let ok = true;
+    for (const id of [...cd.ids].sort((a, b) => cells(byId(s, b)!) - cells(byId(s, a)!))) {
+      const b = byId(s, id)!;
+      let spot: { x: number; y: number; rot: boolean } | null = null;
+      for (const rot of b.w === b.h ? [false] : [false, true]) {
+        const bw = rot ? b.h : b.w, bh = rot ? b.w : b.h;
+        for (let yy = bd.y0; yy <= bd.y0 + bd.h - bh && !spot; yy++)
+          for (let xx = bd.x0; xx <= bd.x0 + bd.w - bw; xx++) if (free(o2, xx, yy, bw, bh)) { spot = { x: xx, y: yy, rot }; break; }
+        if (spot) break;
+      }
+      if (!spot) { ok = false; break; }
+      const bw = spot.rot ? b.h : b.w, bh = spot.rot ? b.w : b.h;
+      for (let yy = spot.y; yy < spot.y + bh; yy++) for (let xx = spot.x; xx < spot.x + bw; xx++) o2[yy * N + xx] = id;
+      plan.push({ id, ...spot });
+    }
+    if (!ok) continue;
+    for (const p of plan) {
+      if (!byId(s, p.id)) continue; // 前面挪动触发了合并，这座已经合掉了
+      const r = move(s, p.id, p.x, p.y, p.rot);
+      if (r.err) return false;
+      roomStats.moved++;
+    }
+    roomStats.ok++;
+    roomStats.ap += cd.c;
+    return true;
+  }
+  return false;
+}
+
 function play(bot: Bot, seed: number, verbose = false): Result {
+  hooks.noSpot = MAKE_ROOM && bot !== 'novice' ? makeRoom : undefined;
   const s = newGame({ seed });
   let apBlockedTurns = 0, plotBlockedTurns = 0, quotaBlockedTurns = 0;
   const recent: TurnLog[] = [];
@@ -277,6 +350,12 @@ function summary(rs: Result[], label: string) {
   console.log(`  村庄中心升级：${lv.join('，')}`);
   console.log(`  行动力/回合：收入 基础 ${per((r) => r.stats.apBase)} + 合并返还 ${per((r) => r.stats.apRefund)} + 卖出 ${per((r) => r.stats.apSell)}；支出 移动 ${per((r) => r.stats.apMove)} + 买地 ${per((r) => r.stats.apPlot)}；浪费 ${per((r) => r.stats.apWasted)}`);
   console.log(`  “行动力不够”回合：合并 ${pct(avg(rs.map((r) => r.apBlockedTurns / r.turns)))}，买地 ${pct(avg(rs.map((r) => r.plotBlockedTurns / r.turns)))}；地块额度满 ${pct(avg(rs.map((r) => r.quotaBlockedTurns / r.turns)))}`);
+  {
+    const lw = (k: string) => f1(avg(rs.map((r) => r.stats.lostWhy?.[k] ?? 0)));
+    const rm = (k: string) => f1(avg(rs.map((r) => (r.stats as unknown as { room?: Record<string, number> }).room?.[k] ?? 0)));
+    console.log(`  腾位置（每局）：放不下 ${rm('tries')} 次，腾成 ${rm('ok')} 次，挪了 ${rm('moved')} 座，花行动力 ${rm('ap')}`);
+    console.log(`  丢弃原因（每局）：共 ${f1(avg(rs.map((r) => r.stats.lost)))} 座 = 地块额度满/没地可买 ${lw('quota')} + 有地可买但行动力不够 ${lw('ap')} + 买得起但没先买 ${lw('notBought')}；其中空格总数其实够、只是碎了放不下 ${lw('fragmented')}，建筑比仓库还大 ${lw('tooBigForWarehouse')}`);
+  }
   console.log(`  ★ 每局一共出现建筑 ${f1(avg(rs.map((r) => r.stats.arrived + RULES.startBuildings.length)))} 座（开局 ${RULES.startBuildings.length} + 选卡 ${f1(avg(rs.map((r) => r.stats.arrived - (r.stats.autoFilled ?? 0))))} + 自动补齐 ${f1(avg(rs.map((r) => r.stats.autoFilled ?? 0)))}），合并 ${f1(avg(rs.map((r) => r.stats.merges + r.stats.landingMerges)))} 次（每大回合 ${f1(avg(rs.map((r) => (r.stats.merges + r.stats.landingMerges) / Math.max(1, r.rounds))))}；手动 ${f1(avg(rs.map((r) => r.stats.merges)))} + 落地自动 ${f1(avg(rs.map((r) => r.stats.landingMerges)))}），局末剩 ${f1(avg(rs.map((r) => r.buildings)))} 座`);
   console.log(`  每局：手动合并 ${f1(avg(rs.map((r) => r.stats.merges)))}，落地自动合并 ${f1(avg(rs.map((r) => r.stats.landingMerges)))}，连锁 ${f1(avg(rs.map((r) => r.stats.combos)))}，来了 ${f1(avg(rs.map((r) => r.stats.arrived)))} 座，进仓库 ${f1(avg(rs.map((r) => r.stats.toWarehouse)))}，丢掉 ${f1(avg(rs.map((r) => r.stats.lost)))}，卖出 ${f1(avg(rs.map((r) => r.stats.sold)))}`);
   const keys = ['housing', 'food', 'happy', ...MATERIALS];

@@ -21,6 +21,7 @@ export interface Stats {
   coreTurn: number[]; // 升到第 n 级村庄中心的回合
   lvTurn: number[]; // 第一次出现第 n 级建筑的回合
   autoFilled?: number;
+  lostWhy?: Record<string, number>; // 丢弃原因（见 toWarehouse）
 }
 
 export interface State {
@@ -194,13 +195,24 @@ function toWarehouse(s: State, it: Item): boolean {
     return true;
   }
   s.stats.lost++;
+  // 丢弃原因：地块额度满 / 还能买地但行动力不够 / 能买也买得起（机器人没先买）；另记空格够不够（够 = 地图上是碎格子放不下）
+  const lw = (s.stats.lostWhy ??= {});
+  const canBuy = ownedCount(s) < plotQuota(s) && buyablePlots(s).length > 0;
+  const why = !canBuy ? 'quota' : s.ap < plotAp(s) ? 'ap' : 'notBought';
+  lw[why] = (lw[why] ?? 0) + 1;
+  if (freeCells(s) >= itemCells(it)) lw.fragmented = (lw.fragmented ?? 0) + 1;
+  if (itemCells(it) > RULES.warehouseCells) lw.tooBigForWarehouse = (lw.tooBigForWarehouse ?? 0) + 1;
   return false;
 }
 
 /** 新建筑落地（不花行动力）；放不下进仓库，仓库满了就丢掉。返回落地的建筑 */
+/** 玩家（机器人）介入点：新建筑找不到地方时，可以先花行动力挪开别的建筑腾位置，腾出来返回 true */
+export const hooks: { noSpot?: (s: State, it: Item) => boolean } = {};
+
 export function land(s: State, it: Item, noMerge = false): Building | null {
   const anchor = s.lastPlaced ?? core(s);
-  const sp = landingSpot(s, it, anchor);
+  let sp = landingSpot(s, it, anchor);
+  if (!sp && hooks.noSpot?.(s, it)) sp = landingSpot(s, it, s.lastPlaced ?? core(s));
   if (!sp) { toWarehouse(s, it); return null; }
   const b = addBuilding(s, it, sp);
   s.lastPlaced = sp;
@@ -402,7 +414,8 @@ export function releaseWarehouse(s: State) {
   s.warehouse = [];
   for (const it of items) {
     const anchor = s.lastPlaced ?? core(s);
-    const sp = landingSpot(s, it, anchor);
+    let sp = landingSpot(s, it, anchor);
+    if (!sp && hooks.noSpot?.(s, it)) sp = landingSpot(s, it, s.lastPlaced ?? core(s));
     if (!sp) { s.warehouse.push(it); continue; }
     const b = addBuilding(s, it, sp);
     s.lastPlaced = sp;
