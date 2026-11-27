@@ -198,7 +198,11 @@ function play(bot: Bot, seed: number, verbose = false): Result {
     const tl: TurnLog = { apBlocked: false, plotBlocked: false, quotaBlocked: false };
     trySell(s, bot);
     if (bot === 'expert') tryPlot(s, bot, tl);
-    while (s.offer) { chooseCard(s, pickCard(s, bot)); doMerges(s, bot, tl); }
+    while (s.offer) {
+      const i = pickCard(s, bot);
+      if (process.env.PROBE) { const pk = ((s as unknown as { _picked?: Record<string, number> })._picked ??= {}); for (const it of cardItems(s.offer[i])) pk[it.fam] = (pk[it.fam] ?? 0) + Math.pow(3, it.lvl - 1); }
+      chooseCard(s, i); doMerges(s, bot, tl);
+    }
     tryPlot(s, bot, tl);
     if (bot !== 'novice') doMerges(s, bot, tl);
     {
@@ -233,6 +237,12 @@ function play(bot: Bot, seed: number, verbose = false): Result {
     const ap = recent.filter((x) => x.apBlocked || x.plotBlocked).length;
     const quota = recent.filter((x) => x.quotaBlocked).length;
     cause = ap >= 3 ? '行动力不够' : quota >= 3 ? '地块额度满（村庄中心没升级）' : '建筑/原料跟不上';
+  }
+  if (process.env.PROBE) {
+    const e = economy(s);
+    const dist = (fam: string) => { const h: Record<number, number> = {}; for (const b of s.buildings) if (b.fam === fam && !b.core) h[b.lvl] = (h[b.lvl] ?? 0) + 1; return JSON.stringify(h); };
+    const offered: Record<string, number> = (s as unknown as { _picked?: Record<string, number> })._picked ?? {};
+    console.log(`PROBE seed${seed} T${s.turn} pop ${Math.round(s.pop)} housing ${Math.round(e.housing)} food ${Math.round(e.foodProd)} happyProd ${Math.round(e.happyProd)} need ${Math.round(e.happyNeed)} house ${dist('house')} field ${dist('field')} pasture ${dist('pasture')} picked ${JSON.stringify(offered)}`);
   }
   const lvHist: number[] = [];
   for (const b of s.buildings) if (!b.core) lvHist[b.lvl] = (lvHist[b.lvl] ?? 0) + 1;

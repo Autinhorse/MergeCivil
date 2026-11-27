@@ -176,6 +176,7 @@ export const RULES = {
   // 新建筑：每回合 1 次 cardChoices 选 1，每张卡的价值 ≈ arrivalPerPop × 本回合人口增长（单位 = 几座 Lv1）
   cardChoices: 3,
   arrivalPerPop: 1.5,
+  needMargin: 1.1, // 发卡时住房/粮食/幸福按需求的几倍算够（原来是 +2）
   needHorizon: 1, // 发卡看几回合以后的缺口（人口按增长推算）；试过 5，早期会饿死，先用 1
   arrivalMin: 3, // 每张卡至少值几座 Lv1
   bundleMinCount: 3, // 卡里同种建筑至少几座：价值不够就降级发

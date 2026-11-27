@@ -386,9 +386,18 @@ export function needs(s: State): { fam: string; lv1: number; reason: string }[] 
       if (v > 0) out.push({ fam: f.id, lv1: gap / v, reason });
     }
   };
-  add('housing', e.homeless + 2, '住房');
-  add('food', e.foodNeed - e.foodProd + 2, '粮食');
-  add('happy', -e.happy + 2, '幸福');
+  // 住房、粮食、幸福：目标 = 需求 × needMargin（留一点富余）。都够了的话，就补“富余比例最低”的那一项，免得一直发同一种
+  const M = RULES.needMargin;
+  const cats: [keyof Row, number, number, string][] = [
+    ['housing', future, e.housing, '住房'],
+    ['food', e.foodNeed, e.foodProd, '粮食'],
+    ['happy', e.happyNeed - e.happyBuildings, e.happyProd, '幸福'],
+  ];
+  for (const [k, dem, sup, why] of cats) add(k, dem * M - sup, why);
+  if (!out.length) {
+    const [k, dem, , why] = cats.reduce((a, b) => (b[2] / Math.max(1, b[1]) < a[2] / Math.max(1, a[1]) ? b : a));
+    add(k, Math.max(1, dem * 0.1), why);
+  }
   // 补上面这些缺口的建筑自己也要吃原料（祭坛吃木）：按吃得最多的那种算进原料缺口
   const implied: Partial<Record<ResKey, number>> = {};
   for (const n of out) for (const [k, v] of Object.entries(FAMILY[n.fam].row)) if ((MATERIALS as string[]).includes(k) && v! < 0) implied[k as ResKey] = Math.max(implied[k as ResKey] ?? 0, n.lv1 * -v!);
