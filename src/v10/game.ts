@@ -371,9 +371,11 @@ export const itemValue = (it: Item) => Math.pow(MERGE.count, it.lvl - 1);
 export const cardValue = (c: Card) => cardItems(c).reduce((a, it) => a + itemValue(it), 0);
 export const pool = (s: State) => FAMILIES.filter((f) => f.era <= s.era);
 
-/** 下回合各项缺口，换算成“还差几座 Lv1 该种建筑” */
+/** 未来 needHorizon 回合的各项缺口，换算成“还差几座 Lv1 该种建筑” */
 export function needs(s: State): { fam: string; lv1: number; reason: string }[] {
-  const e = economy(s, s.pop + popGrowth(s.turn));
+  let future = s.pop;
+  for (let t = 0; t < RULES.needHorizon; t++) future += popGrowth(s.turn + t);
+  const e = economy(s, future);
   const out: { fam: string; lv1: number; reason: string }[] = [];
   const add = (key: keyof Row, gap: number, reason: string) => {
     if (gap <= 0) return;
@@ -414,8 +416,18 @@ export function bundleLevel(s: State, V: number) {
 export function genOffer(s: State): Card[] {
   const r = () => rand(s);
   const V = arrivalValue(s);
-  const lvl = bundleLevel(s, V);
+  const minLvl = RULES.oldLevelFillOnly ? Math.min(levelCap(s), RULES.eraCardLevel[s.era] ?? 1) : 1;
+  const lvl = Math.max(minLvl, bundleLevel(s, V));
   const count = Math.max(1, Math.round(V / Math.pow(MERGE.count, lvl - 1)));
+  /** 旧时代等级只补齐：这种建筑低于 minLvl 的等级里，差几座凑满 3 座就补几座 */
+  const fill = (fam: string): Item[] => {
+    const out: Item[] = [];
+    for (let L = 1; L < minLvl; L++) {
+      const n = s.buildings.filter((b) => !b.core && b.fam === fam && b.lvl === L).length % MERGE.count;
+      if (n > 0) for (let i = n; i < MERGE.count; i++) out.push({ fam, lvl: L });
+    }
+    return out;
+  };
   const ns = needs(s);
   const fams = pool(s);
   const cards: Card[] = [];
@@ -425,7 +437,9 @@ export function genOffer(s: State): Card[] {
     const n = ns.find((x) => !used.has(x.fam));
     const fam = n?.fam ?? fams.filter((f) => !used.has(f.id))[Math.floor(r() * Math.max(1, fams.length - used.size))]?.id ?? fams[0].id;
     used.add(fam);
-    cards.push({ kind: 'bundle', fam, lvl, count, reason: n?.reason ?? '随机' });
+    const f = fill(fam);
+    if (f.length) cards.push({ kind: 'mixed', items: [...f, ...Array.from({ length: count }, () => ({ fam, lvl }))] });
+    else cards.push({ kind: 'bundle', fam, lvl, count, reason: n?.reason ?? '随机' });
   }
   // 最后一张：按缺口比例混合
   const items: Item[] = [];
@@ -437,6 +451,7 @@ export function genOffer(s: State): Card[] {
     while (k < w.length - 1 && (x -= w[k]) > 0) k++;
     items.push({ fam: ids[k], lvl });
   }
+  if (minLvl > 1) for (const fam of new Set(items.map((x) => x.fam))) items.unshift(...fill(fam));
   cards.push({ kind: 'mixed', items });
   return cards;
 }

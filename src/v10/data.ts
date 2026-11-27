@@ -173,8 +173,13 @@ export const RULES = {
   // 新建筑：每回合 1 次 cardChoices 选 1，每张卡的价值 ≈ arrivalPerPop × 本回合人口增长（单位 = 几座 Lv1）
   cardChoices: 3,
   arrivalPerPop: 1.5,
+  needHorizon: 1, // 发卡看几回合以后的缺口（人口按增长推算）；试过 5，早期会饿死，先用 1
   arrivalMin: 3, // 每张卡至少值几座 Lv1
   bundleMinCount: 3, // 卡里同种建筑至少几座：价值不够就降级发
+  // 时代升级后旧时代等级只补齐（2026-11-27 Rex 提议，先做成开关）：
+  // 开着时，每个时代发卡的最低等级 = eraCardLevel[时代]；低于它的等级只补到凑满 3 座为止，之后不再发
+  oldLevelFillOnly: false,
+  eraCardLevel: [0, 1, 2, 3, 4, 5],
   // 仓库：放不下的新建筑进仓库，每回合开始按落地规则自动放出（玩家不能选位置）
   warehouseCells: 6,
   sellRatio: 0.5, // 卖出返还 = max(sellMin, floor(格数 × sellRatio))；应低于合并返还
