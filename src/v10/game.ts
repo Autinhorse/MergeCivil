@@ -78,7 +78,8 @@ export const cells = (s: { w: number; h: number }) => s.w * s.h;
 export const footprint = (lvl: number) => FOOTPRINTS[Math.min(lvl, FOOTPRINTS.length) - 1];
 export const levelCap = (s: State) => Math.min(FOOTPRINTS.length, s.coreLevel + CORE.levelCapOffset);
 export const apPerTurn = (s: State) => RULES.apBase + RULES.apPerEra * (s.era - 1);
-export const popGrowth = (turn: number) => RULES.popBase + RULES.popPerTurn * turn;
+/** 第 turn 回合的人口增长 = 固定部分 + 按回合加的部分 + 当前人口 × popRate（按比例增长） */
+export const popGrowth = (turn: number, pop = 0) => RULES.popBase + RULES.popPerTurn * turn + RULES.popRate * pop;
 export const core = (s: State) => s.buildings.find((b) => b.core)!;
 export const rowOfB = (b: Building): Row => (b.core ? { housing: CORE_LEVELS[b.lvl].housing } : rowOf(b.fam, b.lvl));
 export const nameOfB = (b: Building) => (b.core ? CORE_LEVELS[b.lvl].name : nameOf(b.fam, b.lvl));
@@ -376,7 +377,7 @@ export const pool = (s: State) => FAMILIES.filter((f) => f.era <= s.era);
 /** 未来 needHorizon 回合的各项缺口，换算成“还差几座 Lv1 该种建筑” */
 export function needs(s: State): { fam: string; lv1: number; reason: string }[] {
   let future = s.pop;
-  for (let t = 0; t < Math.max(RULES.needHorizon, RULES.turnsPerRound); t++) future += popGrowth(s.turn + t);
+  for (let t = 0; t < Math.max(RULES.needHorizon, RULES.turnsPerRound); t++) future += popGrowth(s.turn + t, future);
   const e = economy(s, future);
   const out: { fam: string; lv1: number; reason: string }[] = [];
   const add = (key: keyof Row, gap: number, reason: string) => {
@@ -419,7 +420,13 @@ export function needs(s: State): { fam: string; lv1: number; reason: string }[] 
 }
 
 /** 本回合卡牌价值（几座 Lv1），按这回合的人口增长 */
-export const arrivalValue = (s: State) => Math.max(RULES.arrivalMin, RULES.arrivalPerPop * popGrowth(s.turn + RULES.turnsPerRound - Math.max(1, s.picksLeft)));
+export function arrivalValue(s: State) {
+  // 这次选卡对应大回合里的第几个小回合：按那时的人口估算增长
+  const k = RULES.turnsPerRound - Math.max(1, s.picksLeft);
+  let pop = s.pop;
+  for (let t = 0; t < k; t++) pop += popGrowth(s.turn + t, pop);
+  return Math.max(RULES.arrivalMin, RULES.arrivalPerPop * popGrowth(s.turn + k, pop));
+}
 /** 价值 V 的卡发几级：保证同种至少 bundleMinCount 座 */
 export function bundleLevel(s: State, V: number) {
   let lvl = 1;
@@ -645,7 +652,7 @@ function resolveSmallTurn(s: State): TurnReport {
       coreUp = upgradeCore(s);
     }
   }
-  const growth = popGrowth(s.turn);
+  const growth = popGrowth(s.turn, s.pop);
   s.pop += growth;
   s.turn++;
   return { econ: e, growth, coreUp, over: s.over };

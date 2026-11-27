@@ -140,6 +140,7 @@ export const RULES = {
   startPop: 4,
   popBase: 1,
   popPerTurn: 0.08,
+  popRate: 0, // 按比例增长：每回合 + 当前人口 × popRate（比如 0.03 = 3%）
   foodPerPerson: 1,
   // 幸福度（生命值）：= 作坊幸福 + 建筑自带幸福 − 人口 × 每人需求 − 扣分
   // 每人幸福需求按回合慢慢涨（2026-11-27 Rex 定）：= happyBase + happyPerTurn × 回合数，最多 happyMax
