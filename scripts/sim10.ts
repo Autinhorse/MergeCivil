@@ -6,7 +6,7 @@
 //   BOTS=normal,expert N=40 TURNS=250 npm run sim10
 //   NOINF=1 跳过无限行动力对比；CSV=out.csv 把每局结果写成表
 import { writeFileSync } from 'node:fs';
-import { CORE, CORE_LEVELS, ERAS, FAMILY, MATERIALS, MERGE, RES_INFO, RULES } from '../src/v10/data';
+import { CORE, CORE_LEVELS, ERAS, FAMILIES, FAMILY, MATERIALS, MERGE, RES_INFO, RULES } from '../src/v10/data';
 import {
   buyPlot, buyablePlots, cardItems, cells, chooseCard, economy, endTurn, fits, freeCells, groupOf, levelCap, moveCost, move, needs,
   newGame, occupancy, ownedCount, plotAp, plotQuota, previewMove, sellWarehouse, touching, type Building, type Card, type State,
@@ -22,6 +22,12 @@ if (process.env.SET)
     if (!(k in obj)) throw new Error(`没有参数 ${k0}`);
     obj[k] = v === 'true' ? true : v === 'false' ? false : Number(v);
   }
+
+// FAMS_OFF=pasture,theatre 去掉某些建筑种类（试“减少建筑种类”）
+if (process.env.FAMS_OFF) {
+  const off = new Set(process.env.FAMS_OFF.split(','));
+  for (let i = FAMILIES.length - 1; i >= 0; i--) if (off.has(FAMILIES[i].id)) FAMILIES.splice(i, 1);
+}
 
 type Bot = 'novice' | 'normal' | 'expert';
 const BOT_NAME: Record<Bot, string> = { novice: '新手（随便挑卡，不挪建筑，只靠落地合并）', normal: '普通（按缺口挑卡，挪 1 座就能合的最便宜先合）', expert: '熟练（挑卡凑合并、预览连锁、两步布局、存行动力买地）' };
@@ -39,7 +45,7 @@ function mergeMoves(s: State): MoveOpt[] {
   for (const list of kinds.values()) {
     if (list.length < MERGE.count) continue;
     for (const m of list) {
-      if (groupOf(s, m).length >= MERGE.count) continue; // 已经连好（落地合并会处理）
+      if (groupOf(s, m).length >= MERGE.count) { out.push({ id: m.id, x: m.x, y: m.y, rot: false, cost: 0, group: groupOf(s, m).length }); continue; } // 已经连好：原地点一下就合（自动补齐的零头）
       const ign = new Set([m.id]);
       const shapes: [number, number, boolean][] = m.w === m.h ? [[m.w, m.h, false]] : [[m.w, m.h, false], [m.h, m.w, true]];
       let best: MoveOpt | null = null;
@@ -281,6 +287,10 @@ function summary(rs: Result[], label: string) {
   console.log(`  大回合结束时（每 ${RULES.turnsPerRound} 小回合一次，平均每局 ${f1(roundsTotal / rs.length)} 个大回合）：还有能合的但行动力不够 ${er('ap')}，没有挪 1 座就能合的了 ${er('none')}（这时平均还剩 ${f1(rs.reduce((a, r) => a + r.endReason.apLeftWhenNone, 0) / Math.max(1, noneTurns))} 点行动力），其他 ${er('other')}`);
   const maxL = Math.max(...rs.map((r) => r.lvHist.length - 1));
   console.log(`  局末各级建筑数量（平均）：${Array.from({ length: maxL }, (_, i) => i + 1).map((L) => `Lv${L} ${f1(avg(rs.map((r) => r.lvHist[L] ?? 0)))}`).join('，')}；共 ${f1(avg(rs.map((r) => r.buildings)))} 座，空格 ${f1(avg(rs.map((r) => r.freeCells)))}`);
+  const K = RULES.turnsPerRound;
+  const rd = (t: number) => Math.ceil((t - 1) / K);
+  const lvr = [6, 8, 10].map((L) => { const got = rs.filter((r) => r.stats.lvTurn[L]); return `Lv${L} ${got.length}/${rs.length}${got.length ? ` 第 ${f1(avg(got.map((r) => rd(r.stats.lvTurn[L]))))} 大回合（${Math.min(...got.map((r) => rd(r.stats.lvTurn[L])))}–${Math.max(...got.map((r) => rd(r.stats.lvTurn[L])))}）` : ''}`; });
+  console.log(`  第一次合出：${lvr.join('，')}；每局自动补齐 ${f1(avg(rs.map((r) => r.stats.autoFilled ?? 0)))} 座`);
   const top = rs.map((r) => Math.max(0, ...Object.values(r.maxLv)));
   console.log(`  局末最高建筑等级：平均 Lv${f1(avg(top))}，合到 Lv8+ 的局 ${top.filter((x) => x >= 8).length}/${rs.length}，Lv10+ 的局 ${top.filter((x) => x >= 10).length}/${rs.length}`);
   const fams = [...new Set(rs.flatMap((r) => Object.keys(r.maxLv)))];

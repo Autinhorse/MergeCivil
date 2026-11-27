@@ -19,6 +19,8 @@ export interface Stats {
   gapTurns: Record<string, number>; // 各种缺口出现的回合数：housing / food / happy / 原料
   dangerTurns: number;
   coreTurn: number[]; // 升到第 n 级村庄中心的回合
+  lvTurn: number[]; // 第一次出现第 n 级建筑的回合
+  autoFilled?: number;
 }
 
 export interface State {
@@ -177,6 +179,7 @@ export function landingSpot(s: State, item: Item, anchor: Spot, ignore: Set<numb
 function addBuilding(s: State, item: Item, sp: Spot): Building {
   const b: Building = { id: s.nextId++, fam: item.fam, lvl: item.lvl, ...sp };
   s.buildings.push(b);
+  if (s.stats && !s.stats.lvTurn[item.lvl]) s.stats.lvTurn[item.lvl] = s.turn;
   return b;
 }
 
@@ -194,14 +197,32 @@ function toWarehouse(s: State, it: Item): boolean {
 }
 
 /** 新建筑落地（不花行动力）；放不下进仓库，仓库满了就丢掉。返回落地的建筑 */
-export function land(s: State, it: Item): Building | null {
+export function land(s: State, it: Item, noMerge = false): Building | null {
   const anchor = s.lastPlaced ?? core(s);
   const sp = landingSpot(s, it, anchor);
   if (!sp) { toWarehouse(s, it); return null; }
   const b = addBuilding(s, it, sp);
   s.lastPlaced = sp;
-  if (RULES.mergeOnLanding) autoMerge(s, b, true);
+  if (RULES.mergeOnLanding && !noMerge) autoMerge(s, b, true);
   return b;
+}
+
+/**
+ * 低级零头自动补齐（2026-11-27 Rex 定）：比当前发卡等级低 autoFillGap 级及以上的建筑，
+ * 每个大回合开始时把零头（1 或 2 座）补到 3 座，不自动合并，等玩家自己挪过去合。这些等级以后不再出现在卡里。
+ */
+export function autoFillLow(s: State) {
+  if (!RULES.autoFillGap) return;
+  const top = bundleLevel(s, arrivalValue(s)) - RULES.autoFillGap;
+  if (top < 1) return;
+  const cnt = new Map<string, number>();
+  for (const b of s.buildings) if (!b.core && b.lvl <= top) cnt.set(`${b.fam}:${b.lvl}`, (cnt.get(`${b.fam}:${b.lvl}`) ?? 0) + 1);
+  for (const [k, n] of cnt) {
+    const r = n % MERGE.count;
+    if (!r) continue;
+    const [fam, lvl] = k.split(':');
+    for (let i = r; i < MERGE.count; i++) { s.stats.arrived++; s.stats.autoFilled = (s.stats.autoFilled ?? 0) + 1; land(s, { fam, lvl: Number(lvl) }, true); }
+  }
 }
 
 // ---------- 合并 ----------
@@ -620,6 +641,7 @@ export function endTurn(s: State): TurnReport {
   s.ap = keep + base;
   s.stats.apBase += base;
   releaseWarehouse(s);
+  if (!s.over) autoFillLow(s);
   s.picksLeft = s.over ? 0 : RULES.turnsPerRound;
   s.offer = s.over ? null : genOffer(s);
   s.log = s.log.slice(0, 80);
@@ -683,7 +705,7 @@ export function newGame(opts: NewGameOpts = {}): State {
     coreLevel: 1, era: 1, eraTurn: 1,
     ap: 0, warehouse: [], offer: null, picksLeft: RULES.turnsPerRound, lastPlaced: null,
     mult: 1, happy: 0, danger: 0, over: false, log: [],
-    stats: { apBase: 0, apRefund: 0, apSell: 0, apMove: 0, apPlot: 0, apWasted: 0, merges: 0, landingMerges: 0, combos: 0, arrived: 0, toWarehouse: 0, lost: 0, sold: 0, plotsBought: 0, gapTurns: {}, dangerTurns: 0, coreTurn: [] },
+    stats: { apBase: 0, apRefund: 0, apSell: 0, apMove: 0, apPlot: 0, apWasted: 0, merges: 0, landingMerges: 0, combos: 0, arrived: 0, toWarehouse: 0, lost: 0, sold: 0, plotsBought: 0, gapTurns: {}, dangerTurns: 0, coreTurn: [], lvTurn: [] },
     rs: seed >>> 0,
   };
   const c0 = Math.floor(plot / 2) - 1;
