@@ -176,6 +176,7 @@ function trySell(s: State, bot: Bot) {
 const TURNS = Number(process.env.TURNS ?? 200);
 
 interface Result {
+  rounds: number;
   endReason: { ap: number; none: number; other: number; apLeftWhenNone: number }; lvHist: number[]; buildings: number; freeCells: number;
   maxLv: Record<string, number>;
   bot: Bot; seed: number; turns: number; died: boolean; pop: number; coreLevel: number; era: number; plots: number;
@@ -190,12 +191,12 @@ function play(bot: Bot, seed: number, verbose = false): Result {
   const recent: TurnLog[] = [];
   let lastEcon = economy(s);
   const endReason = { ap: 0, none: 0, other: 0, apLeftWhenNone: 0 };
-  for (let t = 0; t < TURNS && !s.over; t++) {
+  let rounds = 0;
+  for (; s.turn <= TURNS && !s.over; rounds++) {
     const tl: TurnLog = { apBlocked: false, plotBlocked: false, quotaBlocked: false };
     trySell(s, bot);
     if (bot === 'expert') tryPlot(s, bot, tl);
-    chooseCard(s, pickCard(s, bot));
-    doMerges(s, bot, tl);
+    while (s.offer) { chooseCard(s, pickCard(s, bot)); doMerges(s, bot, tl); }
     tryPlot(s, bot, tl);
     if (bot !== 'novice') doMerges(s, bot, tl);
     {
@@ -235,7 +236,7 @@ function play(bot: Bot, seed: number, verbose = false): Result {
   for (const b of s.buildings) if (!b.core) lvHist[b.lvl] = (lvHist[b.lvl] ?? 0) + 1;
   const maxLv: Record<string, number> = {};
   for (const b of s.buildings) if (!b.core) maxLv[b.fam] = Math.max(maxLv[b.fam] ?? 0, b.lvl);
-  return { endReason, lvHist, buildings: s.buildings.length - 1, freeCells: freeCells(s), maxLv, bot, seed, turns: s.turn, died: s.over, pop: Math.round(s.pop), coreLevel: s.coreLevel, era: s.era, plots: ownedCount(s), stats: s.stats, apBlockedTurns, plotBlockedTurns, quotaBlockedTurns, cause, deathMix };
+  return { rounds, endReason, lvHist, buildings: s.buildings.length - 1, freeCells: freeCells(s), maxLv, bot, seed, turns: s.turn, died: s.over, pop: Math.round(s.pop), coreLevel: s.coreLevel, era: s.era, plots: ownedCount(s), stats: s.stats, apBlockedTurns, plotBlockedTurns, quotaBlockedTurns, cause, deathMix };
 }
 
 // ---------- 汇总 ----------
@@ -257,9 +258,10 @@ function summary(rs: Result[], label: string) {
   const keys = ['housing', 'food', 'happy', ...MATERIALS];
   const nm: Record<string, string> = { housing: '住房', food: '粮食', happy: '幸福', ...Object.fromEntries(MATERIALS.map((k) => [k, RES_INFO[k].name])) };
   console.log(`  缺口出现的回合占比：${keys.map((k) => `${nm[k]} ${pct(avg(rs.map((r) => (r.stats.gapTurns[k] ?? 0) / r.turns)))}`).join('，')}`);
-  const er = (k: 'ap' | 'none' | 'other') => pct(rs.reduce((a, r) => a + r.endReason[k], 0) / turnsTotal);
+  const roundsTotal = rs.reduce((a, r) => a + r.rounds, 0);
+  const er = (k: 'ap' | 'none' | 'other') => pct(rs.reduce((a, r) => a + r.endReason[k], 0) / roundsTotal);
   const noneTurns = rs.reduce((a, r) => a + r.endReason.none, 0);
-  console.log(`  回合结束时：还有能合的但行动力不够 ${er('ap')}，没有挪 1 座就能合的了 ${er('none')}（这时平均还剩 ${f1(rs.reduce((a, r) => a + r.endReason.apLeftWhenNone, 0) / Math.max(1, noneTurns))} 点行动力），其他 ${er('other')}`);
+  console.log(`  大回合结束时（每 ${RULES.turnsPerRound} 小回合一次，平均每局 ${f1(roundsTotal / rs.length)} 个大回合）：还有能合的但行动力不够 ${er('ap')}，没有挪 1 座就能合的了 ${er('none')}（这时平均还剩 ${f1(rs.reduce((a, r) => a + r.endReason.apLeftWhenNone, 0) / Math.max(1, noneTurns))} 点行动力），其他 ${er('other')}`);
   const maxL = Math.max(...rs.map((r) => r.lvHist.length - 1));
   console.log(`  局末各级建筑数量（平均）：${Array.from({ length: maxL }, (_, i) => i + 1).map((L) => `Lv${L} ${f1(avg(rs.map((r) => r.lvHist[L] ?? 0)))}`).join('，')}；共 ${f1(avg(rs.map((r) => r.buildings)))} 座，空格 ${f1(avg(rs.map((r) => r.freeCells)))}`);
   const fams = [...new Set(rs.flatMap((r) => Object.keys(r.maxLv)))];

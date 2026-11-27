@@ -36,6 +36,8 @@ export interface State {
   ap: number;
   warehouse: Item[];
   offer: Card[] | null;
+  picksLeft: number; // 本（大）回合还剩几次选卡
+
   lastPlaced: Spot | null;
   mult: number; // 上回合幸福度决定的全城产出倍率
   happy: number; // 上回合结算的幸福度
@@ -374,7 +376,7 @@ export const pool = (s: State) => FAMILIES.filter((f) => f.era <= s.era);
 /** 未来 needHorizon 回合的各项缺口，换算成“还差几座 Lv1 该种建筑” */
 export function needs(s: State): { fam: string; lv1: number; reason: string }[] {
   let future = s.pop;
-  for (let t = 0; t < RULES.needHorizon; t++) future += popGrowth(s.turn + t);
+  for (let t = 0; t < Math.max(RULES.needHorizon, RULES.turnsPerRound); t++) future += popGrowth(s.turn + t);
   const e = economy(s, future);
   const out: { fam: string; lv1: number; reason: string }[] = [];
   const add = (key: keyof Row, gap: number, reason: string) => {
@@ -387,9 +389,12 @@ export function needs(s: State): { fam: string; lv1: number; reason: string }[] 
   add('housing', e.homeless + 2, '住房');
   add('food', e.foodNeed - e.foodProd + 2, '粮食');
   add('happy', -e.happy + 2, '幸福');
+  // 补上面这些缺口的建筑自己也要吃原料（祭坛吃木）：按吃得最多的那种算进原料缺口
+  const implied: Partial<Record<ResKey, number>> = {};
+  for (const n of out) for (const [k, v] of Object.entries(FAMILY[n.fam].row)) if ((MATERIALS as string[]).includes(k) && v! < 0) implied[k as ResKey] = Math.max(implied[k as ResKey] ?? 0, n.lv1 * -v!);
   // 原料：净缺口；库存撑不过 3 回合时按整个缺口算，否则减半
   for (const k of MATERIALS) {
-    const gap = e.matDemand[k] - e.matProd[k];
+    const gap = e.matDemand[k] - e.matProd[k] + (implied[k] ?? 0) - Math.max(0, s.res[k]) / 10;
     if (gap > 0) add(k, s.res[k] < gap * 3 ? gap + 1 : gap / 2, `原料·${RES_INFO[k].name}`);
   }
   // 村庄中心进入新时代要原料
@@ -405,7 +410,7 @@ export function needs(s: State): { fam: string; lv1: number; reason: string }[] 
 }
 
 /** 本回合卡牌价值（几座 Lv1），按这回合的人口增长 */
-export const arrivalValue = (s: State) => Math.max(RULES.arrivalMin, RULES.arrivalPerPop * popGrowth(s.turn));
+export const arrivalValue = (s: State) => Math.max(RULES.arrivalMin, RULES.arrivalPerPop * popGrowth(s.turn + RULES.turnsPerRound - Math.max(1, s.picksLeft)));
 /** 价值 V 的卡发几级：保证同种至少 bundleMinCount 座 */
 export function bundleLevel(s: State, V: number) {
   let lvl = 1;
@@ -460,9 +465,11 @@ export function chooseCard(s: State, idx: number): string | null {
   if (!s.offer) return '本回合已经选过了';
   const c = s.offer[idx];
   if (!c) return '没有这张卡';
+  s.picksLeft = Math.max(0, s.picksLeft - 1);
   s.offer = null;
   const items = cardItems(c).sort((a, b) => b.lvl - a.lvl);
   for (const it of items) { s.stats.arrived++; land(s, it); }
+  if (s.picksLeft > 0) s.offer = genOffer(s); // 大回合里还有选卡机会
   return null;
 }
 
@@ -584,8 +591,25 @@ function upgradeCore(s: State) {
 export interface TurnReport { econ: Economy; growth: number; coreUp: boolean; over: boolean }
 
 /** 结束回合：没选卡自动选第一张；结算；村庄中心检查升级；人口增长；发下一回合的行动力、仓库落地、新卡 */
+/** 结束（大）回合：没选完的卡自动选第一张；连续结算 turnsPerRound 个小回合；然后一次发下一个大回合的行动力和卡 */
 export function endTurn(s: State): TurnReport {
-  if (s.offer) chooseCard(s, 0);
+  while (s.offer) chooseCard(s, 0);
+  let rep: TurnReport | null = null;
+  for (let i = 0; i < RULES.turnsPerRound && !s.over; i++) rep = resolveSmallTurn(s);
+  const keep = Math.min(s.ap, RULES.apCarryMax);
+  s.stats.apWasted += s.ap - keep;
+  const base = apPerTurn(s) * RULES.turnsPerRound;
+  s.ap = keep + base;
+  s.stats.apBase += base;
+  releaseWarehouse(s);
+  s.picksLeft = s.over ? 0 : RULES.turnsPerRound;
+  s.offer = s.over ? null : genOffer(s);
+  s.log = s.log.slice(0, 80);
+  return rep!;
+}
+
+/** 一个小回合的结算：生产、幸福、失败线、村庄中心升级、人口增长 */
+function resolveSmallTurn(s: State): TurnReport {
   const e = economy(s);
   for (const k of MATERIALS) s.res[k] = e.stockAfter[k];
   s.happy = e.happy;
@@ -615,14 +639,6 @@ export function endTurn(s: State): TurnReport {
   const growth = popGrowth(s.turn);
   s.pop += growth;
   s.turn++;
-  const keep = Math.min(s.ap, RULES.apCarryMax);
-  s.stats.apWasted += s.ap - keep;
-  const base = apPerTurn(s);
-  s.ap = keep + base;
-  s.stats.apBase += base;
-  releaseWarehouse(s);
-  s.offer = s.over ? null : genOffer(s);
-  s.log = s.log.slice(0, 80);
   return { econ: e, growth, coreUp, over: s.over };
 }
 
@@ -647,7 +663,7 @@ export function newGame(opts: NewGameOpts = {}): State {
     res: { ...zero(), ...RULES.startRes } as Record<ResKey, number>,
     buildings: [], nextId: 1,
     coreLevel: 1, era: 1, eraTurn: 1,
-    ap: 0, warehouse: [], offer: null, lastPlaced: null,
+    ap: 0, warehouse: [], offer: null, picksLeft: RULES.turnsPerRound, lastPlaced: null,
     mult: 1, happy: 0, danger: 0, over: false, log: [],
     stats: { apBase: 0, apRefund: 0, apSell: 0, apMove: 0, apPlot: 0, apWasted: 0, merges: 0, landingMerges: 0, combos: 0, arrived: 0, toWarehouse: 0, lost: 0, sold: 0, plotsBought: 0, gapTurns: {}, dangerTurns: 0, coreTurn: [] },
     rs: seed >>> 0,
@@ -659,7 +675,7 @@ export function newGame(opts: NewGameOpts = {}): State {
   for (const it of opts.loadout ?? []) items.push({ fam: it.fam, lvl: Math.max(1, Math.min(it.lvl, s.coreLevel - META_SHOP.maxLevelBelowCore)) });
   for (const it of items) land(s, it);
   s.lastPlaced = null;
-  s.ap = apPerTurn(s);
+  s.ap = apPerTurn(s) * RULES.turnsPerRound;
   s.stats.apBase += s.ap;
   s.offer = genOffer(s);
   s.log.unshift('部落在一块土地上点燃了村庄中心。');
