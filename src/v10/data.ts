@@ -231,6 +231,8 @@ export const RULES = {
   landNextToSame: true, // 新建筑优先落在同种同级建筑旁边（v9 规则）
   // 新建筑：每回合 1 次 cardChoices 选 1，每张卡的价值 ≈ arrivalPerPop × 本回合人口增长（单位 = 几座 Lv1）
   cardChoices: 3,
+  dealFamilies: 0, // >0 = 不选卡：每次随机直接发这么多种建筑（价值平分）
+  dealNeedWeight: 1, // 不选卡时，缺口大的建筑被抽中的权重（0 = 完全随机）
   arrivalPerPop: 1.5,
   needMargin: 1.1, // 发卡时住房/粮食/幸福按需求的几倍算够（原来是 +2）
   needHorizon: 1, // 发卡看几回合以后的缺口（人口按增长推算）；试过 5，早期会饿死，先用 1
@@ -244,6 +246,8 @@ export const RULES = {
   eraCardLevel: [0, 1, 2, 3, 4, 5],
   autoFillGap: 0, // >0 时：比发卡等级低这么多级及以上的零头，每个大回合开始自动补到 3 座（不自动合），之后不再发。Rex 定 3
   autoFillRef: 'card' as 'card' | 'family', // 'family' = 按这种建筑自己的最高等级算“低几级”
+  cardTopLevels: 0, // >0（Rex 定 2）：卡里每种建筑只发它地图上最高的这几个等级，更低的不发、只从最低一级补零头（这时 autoFillGap 不用）
+  cardTopRef: 'family' as 'family' | 'card', // 'family' = 最高 2 级按这种建筑地图上的最高等级；'card' = 按这回合卡牌等级（建筑小、放得下）
   fillRemainders: false, // 发卡时顺便把同种建筑低等级的零头补到 3 座（凑不齐的低级建筑就能合掉）
   // 仓库：放不下的新建筑进仓库，每回合开始按落地规则自动放出（玩家不能选位置）
   warehouseCells: 6,

@@ -213,6 +213,24 @@ export function land(s: State, it: Item, noMerge = false): Building | null {
  * 每个大回合开始时把零头（1 或 2 座）补到 3 座，不自动合并，等玩家自己挪过去合。这些等级以后不再出现在卡里。
  */
 export function autoFillLow(s: State) {
+  if (RULES.cardTopLevels) {
+    // 每种建筑：最高 cardTopLevels 级以下的等级不再发，只补零头；一次只补最低的那一级（凑整后玩家合上去，下回合再补上一级）
+    const byFam = new Map<string, Map<number, number>>();
+    for (const b of s.buildings) {
+      if (b.core) continue;
+      const m = byFam.get(b.fam) ?? new Map<number, number>();
+      m.set(b.lvl, (m.get(b.lvl) ?? 0) + 1);
+      byFam.set(b.fam, m);
+    }
+    for (const [fam, m] of byFam) {
+      const top = RULES.cardTopRef === 'card' ? famLevel(s, fam, bundleLevel(s, arrivalValue(s))) : Math.max(...m.keys());
+      const lows = [...m.entries()].filter(([L, n]) => L <= top - RULES.cardTopLevels && n % MERGE.count).sort((a, b) => a[0] - b[0]);
+      if (!lows.length) continue;
+      const [L, n] = lows[0];
+      for (let i = n % MERGE.count; i < MERGE.count; i++) { s.stats.arrived++; s.stats.autoFilled = (s.stats.autoFilled ?? 0) + 1; land(s, { fam, lvl: L }, true); }
+    }
+    return;
+  }
   if (!RULES.autoFillGap) return;
   // 参照等级：'card' = 比发卡等级低 autoFillGap 级；'family' = 比这种建筑在地图上的最高等级低 autoFillGap 级（Rex：田地到 Lv5，Lv3 就补）
   const cardTop = bundleLevel(s, arrivalValue(s)) - RULES.autoFillGap;
@@ -400,10 +418,15 @@ export const cardValue = (c: Card) => cardItems(c).reduce((a, it) => a + itemVal
 export const pool = (s: State) => FAMILIES.filter((f) => f.era <= s.era && f.start <= levelCap(s));
 /** 这种建筑在卡里发几级：至少是它的起始级别 */
 export const baseLevel = (fam: string) => startBase(fam);
+export const famTop = (s: State, fam: string) => s.buildings.reduce((m, b) => (!b.core && b.fam === fam ? Math.max(m, b.lvl) : m), 0);
 export const famLevel = (s: State, fam: string, lvl: number) => {
   const st = FAMILY[fam]?.start ?? 1;
   // 发的这一级价值 ≈ 卡片等级 lvl 的价值
-  return Math.max(st, Math.min(levelCap(s), Math.round(baseLevel(fam) + lvl - 1)));
+  const L = Math.max(st, Math.min(levelCap(s), Math.round(baseLevel(fam) + lvl - 1)));
+  // 只发这种建筑地图上最高的 cardTopLevels 个等级（2026-11-27 Rex）；更低的只补零头
+  const top = famTop(s, fam);
+  if (!RULES.cardTopLevels || !top || RULES.cardTopRef === 'card') return L;
+  return Math.max(st, Math.min(top, Math.max(top - RULES.cardTopLevels + 1, L)));
 };
 /** 每人生活用品需求（goodsFromEra 时代以前不要） */
 export const goodsPerPerson = (s: State) => (s.era >= RULES.goodsFromEra ? RULES.goodsBase + RULES.goodsPerTurn * s.turn : 0);
@@ -498,6 +521,27 @@ export function genOffer(s: State): Card[] {
   };
   const ns = needs(s);
   const fams = pool(s);
+  // 不选卡模式（2026-11-27 Rex 提议）：随机挑 dealFamilies 种符合条件的建筑，价值平分，直接发（只有一张“卡”，自动拿）
+  if (RULES.dealFamilies > 0) {
+    const w = new Map<string, number>(fams.map((f) => [f.id, 1]));
+    const tot = ns.reduce((a, n) => a + n.lv1, 0) || 1;
+    for (const n of ns) w.set(n.fam, (w.get(n.fam) ?? 0) + (fams.length * RULES.dealNeedWeight * n.lv1) / tot);
+    const picked: string[] = [];
+    while (picked.length < Math.min(RULES.dealFamilies, fams.length)) {
+      const cand = [...w.entries()].filter(([f]) => !picked.includes(f));
+      let x = r() * cand.reduce((a, [, v]) => a + v, 0), k = 0;
+      while (k < cand.length - 1 && (x -= cand[k][1]) > 0) k++;
+      picked.push(cand[k][0]);
+    }
+    const items: Item[] = [];
+    for (const fam of picked) {
+      const n = ns.find((x) => x.fam === fam);
+      const L = Math.max(n?.lvl ?? 0, famLevel(s, fam, lvl));
+      const c = Math.max(1, Math.round(V / picked.length / Math.pow(MERGE.count, L - baseLevel(fam))));
+      for (let i = 0; i < c; i++) items.push({ fam, lvl: L });
+    }
+    return [{ kind: 'mixed', items }];
+  }
   const cards: Card[] = [];
   const used = new Set<string>();
   // 前几张：最大的几个缺口；没缺口就随机
