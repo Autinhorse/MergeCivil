@@ -1,7 +1,7 @@
 // v10 规则：纯逻辑，不碰界面。数值全部来自 ./data。
 import {
   CORE, CORE_LEVELS, ERAS, RES_INFO, FAMILIES, FAMILY, FOOTPRINTS, MATERIALS, MERGE, RES_KEYS, RULES,
-  META_SHOP, materialsOfEra, rowOf, lv1Row, nameOf, type ResKey, type Row,
+  META_SHOP, materialsOfEra, rowOf, lv1Row, startBase, nameOf, type ResKey, type Row,
 } from './data';
 
 export interface Spot { x: number; y: number; w: number; h: number }
@@ -396,11 +396,11 @@ export const itemValue = (it: Item) => Math.pow(MERGE.count, it.lvl - baseLevel(
 export const cardValue = (c: Card) => cardItems(c).reduce((a, it) => a + itemValue(it), 0);
 export const pool = (s: State) => FAMILIES.filter((f) => f.era <= s.era && f.start <= levelCap(s));
 /** 这种建筑在卡里发几级：至少是它的起始级别 */
-/** 起始级别高的链：relStart 开着时，起始级别那一级只顶 1 座 Lv1（产出、价值都从起始级别开始算），发卡等级跟着往上挪 */
-export const baseLevel = (fam: string) => (RULES.relStart ? FAMILY[fam]?.start ?? 1 : 1);
+export const baseLevel = (fam: string) => startBase(fam);
 export const famLevel = (s: State, fam: string, lvl: number) => {
   const st = FAMILY[fam]?.start ?? 1;
-  return RULES.relStart ? Math.max(st, Math.min(levelCap(s), st + lvl - 1)) : Math.max(lvl, st);
+  // 发的这一级价值 ≈ 卡片等级 lvl 的价值
+  return Math.max(st, Math.min(levelCap(s), Math.round(baseLevel(fam) + lvl - 1)));
 };
 /** 每人生活用品需求（goodsFromEra 时代以前不要） */
 export const goodsPerPerson = (s: State) => (s.era >= RULES.goodsFromEra ? RULES.goodsBase + RULES.goodsPerTurn * s.turn : 0);

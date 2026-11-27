@@ -79,7 +79,7 @@ export const FAMILIES: Family[] = [
   { id: 'theatre', name: '剧场', icon: '🎭', era: 4, start: 5, row: { happy: 6 }, auto: [1, 1], names: N('', '', '', '', '剧场', '圆形剧场', '大竞技场', '皇家剧院', '歌剧院', '音乐厅', '文化中心', '沉浸式剧场') },
   { id: 'textile', name: '纺织坊', icon: '🧵', era: 4, start: 5, row: { goods: 6 }, auto: [1, 1], names: N('', '', '', '', '纺织坊', '织布坊', '丝绸工坊', '纺织行会', '呢绒工场', '纺织厂', '服装厂', '智能纺织厂') },
   { id: 'bank', name: '银行', icon: '🏦', era: 6, start: 7, row: { goods: 8 }, auto: [1, 1], names: N('', '', '', '', '', '', '银行', '商业银行', '国家银行', '证券交易所', '金融中心', '数字货币中心') },
-  { id: 'plant', name: '电厂', icon: '⚡', era: 8, start: 9, row: { coal: -2, power: 4 }, names: N('', '', '', '', '', '', '', '', '火力发电厂', '核电站', '太阳能电站', '轨道太阳能站') },
+  { id: 'plant', name: '电厂', icon: '⚡', era: 8, start: 9, row: { coal: -2, power: 4 * 3 }, names: N('', '', '', '', '', '', '', '', '火力发电厂', '核电站', '太阳能电站', '轨道太阳能站') },
 ];
 export const FAMILY: Record<string, Family> = Object.fromEntries(FAMILIES.map((f) => [f.id, f]));
 
@@ -114,12 +114,21 @@ export function lv1Row(family: string, lvl: number): Row {
   return row;
 }
 
+/**
+ * 起始级别高的链（银行 Lv7、电厂 Lv9）起始那一级顶几座 Lv1：= 3^((起始级别 − 1) × startScale)。
+ * startScale 0 = 只顶 1 座；1 = 照合并倍率全算（一座 Lv7 银行顶 729 座）。返回“相当于从第几级开始放大”
+ */
+export function startBase(family: string): number {
+  const st = FAMILY[family]?.start ?? 1;
+  return 1 + (st - 1) * (1 - RULES.startScale);
+}
+
 /** 某种建筑第 lvl 级的收支行（折合 Lv1 按合并规则放大） */
 export function rowOf(family: string, lvl: number): Row {
   const out: Row = {};
   for (const [k, v] of Object.entries(lv1Row(family, lvl)) as [RowKey, number][]) {
     const g = v > 0 ? MERGE.produceGain : MERGE.consumeGain;
-    out[k] = v * Math.pow(MERGE.count * g, lvl - (RULES.relStart ? FAMILY[family].start : 1));
+    out[k] = v * Math.pow(MERGE.count * g, lvl - startBase(family));
   }
   return out;
 }
@@ -188,8 +197,8 @@ export const RULES = {
   powerDraw: 0.5,
   // 祭坛从 Lv2 起（新表），开局村庄中心 Lv1 时没有幸福来源：先让村庄中心自带幸福 = 自带住房 × coreHappy（占位）
   coreHappy: 2,
-  // 起始级别高的链（银行 Lv7、电厂 Lv9）：true = 起始那一级的产出/价值只顶 1 座 Lv1（否则一座 Lv7 银行一出来就顶 729 座 Lv1）
-  relStart: true,
+  // 起始级别高的链（银行 Lv7、电厂 Lv9）起始那一级顶 3^((起始级别 − 1) × startScale) 座 Lv1。0 = 顶 1 座，1 = 顶 729 座（Lv7）
+  startScale: 0.5,
   // 发卡时缺“换产出才有”的原料（煤要伐木场 Lv8）：true = 直接发那一级；false = 照常发卡片等级，玩家自己合上去
   stageJump: true,
   homelessPenalty: 1, // 每个无家可归的人扣多少
