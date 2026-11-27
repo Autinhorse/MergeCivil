@@ -189,7 +189,11 @@ const warehouseUsed = (s: State) => s.warehouse.reduce((a, it) => a + cells({ w:
 const itemCells = (it: Item) => { const [w, h] = footprint(it.lvl); return w * h; };
 
 function toWarehouse(s: State, it: Item): boolean {
-  if (warehouseUsed(s) + itemCells(it) <= RULES.warehouseCells) {
+  // 按座数算（2026-11-27 Rex）：容量 = 基础 + 每进一个时代加几座（以后做成局外升级）；否则按格数
+  const fitsWh = RULES.warehouseSlots > 0
+    ? s.warehouse.length < RULES.warehouseSlots + RULES.warehouseSlotsPerEra * (s.era - 1)
+    : warehouseUsed(s) + itemCells(it) <= RULES.warehouseCells;
+  if (fitsWh) {
     s.warehouse.push(it);
     s.stats.toWarehouse++;
     return true;
@@ -201,7 +205,7 @@ function toWarehouse(s: State, it: Item): boolean {
   const why = !canBuy ? 'quota' : s.ap < plotAp(s) ? 'ap' : 'notBought';
   lw[why] = (lw[why] ?? 0) + 1;
   if (freeCells(s) >= itemCells(it)) lw.fragmented = (lw.fragmented ?? 0) + 1;
-  if (itemCells(it) > RULES.warehouseCells) lw.tooBigForWarehouse = (lw.tooBigForWarehouse ?? 0) + 1;
+  if (!RULES.warehouseSlots && itemCells(it) > RULES.warehouseCells) lw.tooBigForWarehouse = (lw.tooBigForWarehouse ?? 0) + 1;
   return false;
 }
 

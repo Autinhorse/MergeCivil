@@ -251,6 +251,8 @@ export const RULES = {
   fillRemainders: false, // 发卡时顺便把同种建筑低等级的零头补到 3 座（凑不齐的低级建筑就能合掉）
   // 仓库：放不下的新建筑进仓库，每回合开始按落地规则自动放出（玩家不能选位置）
   warehouseCells: 6,
+  warehouseSlots: 0, // >0 = 仓库按座数算（不管多大），容量 = warehouseSlots + warehouseSlotsPerEra × (时代 − 1)
+  warehouseSlotsPerEra: 0,
   sellRatio: 0.5, // 卖出返还 = max(sellMin, floor(格数 × sellRatio))；应低于合并返还
   sellMin: 1,
   allowMapSell: true, // 地图上的建筑也能卖
