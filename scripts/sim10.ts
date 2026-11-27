@@ -238,6 +238,11 @@ function play(bot: Bot, seed: number, verbose = false): Result {
     const quota = recent.filter((x) => x.quotaBlocked).length;
     cause = ap >= 3 ? '行动力不够' : quota >= 3 ? '地块额度满（村庄中心没升级）' : '建筑/原料跟不上';
   }
+  if (process.env.PROBE_ALL) {
+    const m: Record<string, Record<number, number>> = {};
+    for (const b of s.buildings) if (!b.core) ((m[b.fam] ??= {})[b.lvl] = (m[b.fam][b.lvl] ?? 0) + 1);
+    console.log('PROBEALL ' + JSON.stringify(m));
+  }
   if (process.env.PROBE) {
     const e = economy(s);
     const dist = (fam: string) => { const h: Record<number, number> = {}; for (const b of s.buildings) if (b.fam === fam && !b.core) h[b.lvl] = (h[b.lvl] ?? 0) + 1; return JSON.stringify(h); };
