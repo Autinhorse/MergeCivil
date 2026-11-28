@@ -68,7 +68,7 @@ export const FAMILIES: Family[] = [
   { id: 'field', name: '田地', icon: '🌾', era: 1, start: 1, row: { food: 4 }, names: N('浆果树丛', '小块田地', '田地', '灌溉农田', '庄园农场', '梯田庄园', '领主庄园', '轮作农场', '机械化农场', '现代农业基地', '智能温室', '垂直生态农场') },
   { id: 'lumber', weight: 2, name: '伐木场', icon: '🪓', era: 1, start: 1, row: { wood: 3 }, stages: [{ from: 8, row: { coal: 3 } }], names: N('收集木材', '伐木场', '木材工坊', '锯木坊', '木工作坊', '皇家林场', '水力锯木厂', '煤矿', '竖井煤矿', '大煤矿', '机械化煤矿', '煤炭气化厂') },
   { id: 'house', weight: 1.5, name: '住房', icon: '🏠', era: 1, start: 1, row: { housing: 3 }, names: N('窝棚', '小住房', '住房', '土坯房', '石屋', '联排屋', '木筋楼', '市民宅邸', '工人公寓', '高层住宅', '智能社区', '生态穹顶城') },
-  { id: 'quarry', weight: 1.5, name: '采石场', icon: '⛏️', era: 1, start: 1, row: { stone: 3 }, stages: [{ from: 3, row: { copper: 3 } }, { from: 5, row: { iron: 3 } }], names: N('收集石头', '采石场', '青铜矿场', '铜锡矿坑', '铁矿井', '深层铁矿', '矿业公会', '大铁矿山', '蒸汽铁矿', '露天铁矿场', '自动化铁矿', '太空铁矿站') },
+  { id: 'quarry', weight: 2.5, name: '采石场', icon: '⛏️', era: 1, start: 1, row: { stone: 3 }, stages: [{ from: 3, row: { copper: 3 } }, { from: 5, row: { iron: 3 } }], names: N('收集石头', '采石场', '青铜矿场', '铜锡矿坑', '铁矿井', '深层铁矿', '矿业公会', '大铁矿山', '蒸汽铁矿', '露天铁矿场', '自动化铁矿', '太空铁矿站') },
   { id: 'altar', name: '祭坛', icon: '🗿', era: 1, start: 2, row: { happy: 3 }, auto: [1, 0], names: N('', '祭坛', '图腾柱', '神庙', '圣殿', '大神殿', '大教堂', '巴洛克教堂', '城市公园', '体育场', '主题乐园', '全息娱乐中心') },
   // 炼制工坊：Rex 定产生活用品
   { id: 'smelter', name: '炼制工坊', icon: '🔥', era: 2, start: 3, row: { goods: 5 }, auto: [0, 2], names: N('', '', '炼制工坊', '青铜铸坊', '铁匠铺', '兵器工坊', '铁匠行会', '精钢锻坊', '机械锻造厂', '重型机械厂', '精密制造厂', '智能锻造中心') },
@@ -80,7 +80,7 @@ export const FAMILIES: Family[] = [
   { id: 'theatre', name: '剧场', icon: '🎭', era: 4, start: 5, row: { happy: 6 }, auto: [1, 1], names: N('', '', '', '', '剧场', '圆形剧场', '大竞技场', '皇家剧院', '歌剧院', '音乐厅', '文化中心', '沉浸式剧场') },
   { id: 'textile', name: '纺织坊', icon: '🧵', era: 4, start: 5, row: { goods: 6 }, auto: [1, 1], names: N('', '', '', '', '纺织坊', '织布坊', '丝绸工坊', '纺织行会', '呢绒工场', '纺织厂', '服装厂', '智能纺织厂') },
   { id: 'bank', name: '银行', icon: '🏦', era: 6, start: 7, row: { goods: 8 }, auto: [1, 1], names: N('', '', '', '', '', '', '银行', '商业银行', '国家银行', '证券交易所', '金融中心', '数字货币中心') },
-  { id: 'plant', weight: 3, name: '电厂', icon: '⚡', era: 8, start: 9, row: { coal: -2, power: 4 * 3 }, names: N('', '', '', '', '', '', '', '', '火力发电厂', '核电站', '太阳能电站', '轨道太阳能站') },
+  { id: 'plant', weight: 4, name: '电厂', icon: '⚡', era: 8, start: 9, row: { coal: -2, power: 4 * 3 }, names: N('', '', '', '', '', '', '', '', '火力发电厂', '核电站', '太阳能电站', '轨道太阳能站') },
 ];
 export const FAMILY: Record<string, Family> = Object.fromEntries(FAMILIES.map((f) => [f.id, f]));
 
@@ -88,7 +88,7 @@ export const FAMILY: Record<string, Family> = Object.fromEntries(FAMILIES.map((f
 export const MERGE = {
   count: 3,
   maxGroup: 9, // 一次最多合几座；合满 9 座直接升 2 级
-  produceGain: 1.3,
+  produceGain: 1.2,
   consumeGain: 1.2,
 };
 
