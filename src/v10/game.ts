@@ -196,6 +196,8 @@ function toWarehouse(s: State, it: Item): boolean {
   if (fitsWh) {
     s.warehouse.push(it);
     s.stats.toWarehouse++;
+    const st = s.stats as unknown as { whPeak?: number; whPeakEra?: number };
+    if (s.warehouse.length > (st.whPeak ?? 0)) { st.whPeak = s.warehouse.length; st.whPeakEra = s.era; }
     return true;
   }
   s.stats.lost++;

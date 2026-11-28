@@ -354,6 +354,10 @@ function summary(rs: Result[], label: string) {
     const lw = (k: string) => f1(avg(rs.map((r) => r.stats.lostWhy?.[k] ?? 0)));
     const rm = (k: string) => f1(avg(rs.map((r) => (r.stats as unknown as { room?: Record<string, number> }).room?.[k] ?? 0)));
     console.log(`  腾位置（每局）：放不下 ${rm('tries')} 次，腾成 ${rm('ok')} 次，挪了 ${rm('moved')} 座，花行动力 ${rm('ap')}`);
+    const wp = rs.map((r) => (r.stats as unknown as { whPeak?: number }).whPeak ?? 0);
+    const we: Record<string, number> = {};
+    for (const r of rs) { const e = (r.stats as unknown as { whPeakEra?: number }).whPeakEra; if (e) we[ERAS[e].name] = (we[ERAS[e].name] ?? 0) + 1; }
+    console.log(`  仓库峰值：平均 ${f1(avg(wp))} 座，最多 ${Math.max(...wp)} 座；峰值出现的时代 ${Object.entries(we).map(([k, v]) => `${k}${v}局`).join('，')}`);
     console.log(`  丢弃原因（每局）：共 ${f1(avg(rs.map((r) => r.stats.lost)))} 座 = 地块额度满/没地可买 ${lw('quota')} + 有地可买但行动力不够 ${lw('ap')} + 买得起但没先买 ${lw('notBought')}；其中空格总数其实够、只是碎了放不下 ${lw('fragmented')}，建筑比仓库还大 ${lw('tooBigForWarehouse')}`);
   }
   console.log(`  ★ 每局一共出现建筑 ${f1(avg(rs.map((r) => r.stats.arrived + RULES.startBuildings.length)))} 座（开局 ${RULES.startBuildings.length} + 选卡 ${f1(avg(rs.map((r) => r.stats.arrived - (r.stats.autoFilled ?? 0))))} + 自动补齐 ${f1(avg(rs.map((r) => r.stats.autoFilled ?? 0)))}），合并 ${f1(avg(rs.map((r) => r.stats.merges + r.stats.landingMerges)))} 次（每大回合 ${f1(avg(rs.map((r) => (r.stats.merges + r.stats.landingMerges) / Math.max(1, r.rounds))))}；手动 ${f1(avg(rs.map((r) => r.stats.merges)))} + 落地自动 ${f1(avg(rs.map((r) => r.stats.landingMerges)))}），局末剩 ${f1(avg(rs.map((r) => r.buildings)))} 座`);
