@@ -158,6 +158,14 @@ export function landingSpot(s: State, item: Item, anchor: Spot, ignore: Set<numb
   const shapes = w0 === h0 ? [[w0, h0]] : [[w0, h0], [h0, w0]];
   const occ = occupancy(s);
   const bd = ownedBounds(s);
+  // 2026-11-28 Rex：随机落地。在已有地块的所有放得下的位置里随机挑一个（村庄中心升级挤开建筑时不随机）
+  if (RULES.landRandom && !cover) {
+    const spots: Spot[] = [];
+    for (const [w, h] of shapes)
+      for (let y = bd.y0; y <= bd.y0 + bd.h - h; y++)
+        for (let x = bd.x0; x <= bd.x0 + bd.w - w; x++) if (fits(s, x, y, w, h, ignore, occ)) spots.push({ x, y, w, h });
+    return spots.length ? spots[Math.floor(rand(s) * spots.length)] : null;
+  }
   const same = RULES.landNextToSame ? s.buildings.filter((b) => !ignore.has(b.id) && sameKind(b, item)) : [];
   const cx = anchor.x + anchor.w / 2, cy = anchor.y + anchor.h / 2;
   let best: Spot | null = null;

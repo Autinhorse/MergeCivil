@@ -101,22 +101,30 @@ function mergeMoves(s: State): MoveOpt[] {
   return out;
 }
 function setupMove(s: State): MoveOpt | null {
+  // 两步布局：同种同级至少 3 座、但挪 1 座还合不上时，先把一座挪到另一座旁边凑成一对（下一步再挪第 3 座就能合）。
+  // 2026-11-28 随机落地以后：已经有一对的种类也做（把不在最大那组里的挪过去），挑最便宜的
   const cap = levelCap(s);
   const kinds = new Map<string, Building[]>();
   for (const b of s.buildings) if (!b.core && b.lvl + 1 <= cap) { const k = `${b.fam}:${b.lvl}`; (kinds.get(k) ?? kinds.set(k, []).get(k)!).push(b); }
   const occ = occupancy(s);
   let best: MoveOpt | null = null;
   for (const list of kinds.values()) {
-    if (list.length < MERGE.count || list.some((b) => groupOf(s, b).length >= 2)) continue;
-    const m = list.reduce((a, b) => (cells(a) <= cells(b) ? a : b));
-    for (const o of list) {
-      if (o === m) continue;
-      for (let y = o.y - m.h; y <= o.y + o.h; y++)
-        for (let x = o.x - m.w; x <= o.x + o.w; x++)
-          if (touching({ x, y, w: m.w, h: m.h }, o) && fits(s, x, y, m.w, m.h, new Set([m.id]), occ)) {
-            const c = moveCost(m);
-            if (!best || c < best.cost) best = { id: m.id, x, y, rot: false, cost: c, group: 2 };
-          }
+    if (list.length < MERGE.count) continue;
+    const groups = list.map((b) => groupOf(s, b));
+    const big = groups.reduce((a, g) => (g.length > a.length ? g : a), groups[0]);
+    const targets = big.length >= 2 ? big : list;
+    for (const m of list) {
+      if (big.length >= 2 && big.includes(m)) continue;
+      const c = moveCost(m);
+      if (best && c >= best.cost) continue;
+      for (const o of targets) {
+        if (o === m) continue;
+        let found = false;
+        for (let y = o.y - m.h; y <= o.y + o.h && !found; y++)
+          for (let x = o.x - m.w; x <= o.x + o.w; x++)
+            if (touching({ x, y, w: m.w, h: m.h }, o) && fits(s, x, y, m.w, m.h, new Set([m.id]), occ)) { best = { id: m.id, x, y, rot: false, cost: c, group: 2 }; found = true; break; }
+        if (found) break;
+      }
     }
   }
   return best;

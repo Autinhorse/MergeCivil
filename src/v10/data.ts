@@ -234,6 +234,7 @@ export const RULES = {
   mergeOnLanding: true, // 新建筑落地凑够 3 座就自动合并
   refundMult: 1, // 合并返还 × 这个数（1 = 返还刚好等于挪一座同级建筑的花费，合并不亏不赚）
   refundOnLanding: false, // 落地触发的合并给不给返还
+  landRandom: false, // true = 新建筑在空位里随机落（2026-11-28 Rex 定）；false = 贴同种 / 靠近上一座
   landNextToSame: true, // 新建筑优先落在同种同级建筑旁边（v9 规则）
   // 新建筑：每回合 1 次 cardChoices 选 1，每张卡的价值 ≈ arrivalPerPop × 本回合人口增长（单位 = 几座 Lv1）
   cardChoices: 3,
