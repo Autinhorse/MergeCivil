@@ -80,7 +80,7 @@ export const FAMILIES: Family[] = [
   { id: 'theatre', name: '剧场', icon: '🎭', era: 4, start: 5, row: { happy: 6 }, auto: [1, 1], names: N('', '', '', '', '剧场', '圆形剧场', '大竞技场', '皇家剧院', '歌剧院', '音乐厅', '文化中心', '沉浸式剧场') },
   { id: 'textile', name: '纺织坊', icon: '🧵', era: 4, start: 5, row: { goods: 6 }, auto: [1, 1], names: N('', '', '', '', '纺织坊', '织布坊', '丝绸工坊', '纺织行会', '呢绒工场', '纺织厂', '服装厂', '智能纺织厂') },
   { id: 'bank', name: '银行', icon: '🏦', era: 6, start: 7, row: { goods: 8 }, auto: [1, 1], names: N('', '', '', '', '', '', '银行', '商业银行', '国家银行', '证券交易所', '金融中心', '数字货币中心') },
-  { id: 'plant', weight: 4, name: '电厂', icon: '⚡', era: 8, start: 9, row: { coal: -2, power: 4 * 3 }, names: N('', '', '', '', '', '', '', '', '火力发电厂', '核电站', '太阳能电站', '轨道太阳能站') },
+  { id: 'plant', weight: 5, name: '电厂', icon: '⚡', era: 8, start: 9, row: { coal: -2, power: 4 * 3 }, names: N('', '', '', '', '', '', '', '', '火力发电厂', '核电站', '太阳能电站', '轨道太阳能站') },
 ];
 export const FAMILY: Record<string, Family> = Object.fromEntries(FAMILIES.map((f) => [f.id, f]));
 
@@ -129,7 +129,7 @@ export function rowOf(family: string, lvl: number): Row {
   const out: Row = {};
   for (const [k, v] of Object.entries(lv1Row(family, lvl)) as [RowKey, number][]) {
     const g = v > 0 ? MERGE.produceGain : MERGE.consumeGain;
-    out[k] = v * Math.pow(MERGE.count * g, lvl - startBase(family));
+    out[k] = v * Math.pow(MERGE.count * g, lvl - startBase(family)) * (v > 0 ? RULES.prodMult[k] ?? 1 : 1);
   }
   return out;
 }
@@ -182,13 +182,14 @@ export const RULES = {
   startPop: 4,
   popBase: 1,
   popPerTurn: 0.08,
-  popRate: 0.02, // 按比例增长：每回合 + 当前人口 × popRate（比如 0.03 = 3%）
+  popRate: 0.025, // 按比例增长：每回合 + 当前人口 × popRate（比如 0.03 = 3%）
   foodPerPerson: 1,
-  needMult: 1, // 每人需求（粮食/住房/幸福/生活用品）整体倍数，1 = 不变
+  needMult: 2.5, // 每人需求（粮食/住房/幸福/生活用品）整体倍数，1 = 不变
   needMultFrom: 5, // 从第几个大回合开始加
   needMultRamp: 10, // 用几个大回合加满
+  prodMult: { housing: 1, food: 1, happy: 1, power: 1.5 } as Record<string, number>, // 建筑基础产量倍数（按产出项，村庄中心不算）
   needMix: { housing: 1.5, food: 1.8, happy: 0.7, goods: 1.5 } as Record<string, number>, // needMult 多出来的部分按项再乘：幸福本来就最紧，少加；粮食最松，多加
-  needPerLevel: 1.12, // 每人需求随村庄中心等级放大：× needPerLevel^(等级 − needFromLevel)。1 = 不变
+  needPerLevel: 1.08, // 每人需求随村庄中心等级放大：× needPerLevel^(等级 − needFromLevel)。1 = 不变
   needFromLevel: 2, // 从村庄中心第几级开始放大
   // 幸福度（生命值）：= 作坊幸福 + 建筑自带幸福 − 人口 × 每人需求 − 扣分
   // 每人幸福需求按回合慢慢涨（2026-11-27 Rex 定）：= happyBase + happyPerTurn × 回合数，最多 happyMax
@@ -232,7 +233,7 @@ export const RULES = {
   // 玩家操作完点结束，连续结算这几个小回合（人口增长、生产、幸福度按小回合算）。1 = 原来的每回合一结算
   turnsPerRound: 3,
   // 行动力：每回合 apBase + apPerEra × (时代 − 1)，可以存一点到下回合
-  apBase: 20,
+  apBase: 24,
   apPerEra: 1,
   apCarryMax: 5, // 回合末最多留多少到下回合
   moveCostPerCell: 1, // 移动/旋转 = 占地格数 × 这个数
@@ -250,8 +251,8 @@ export const RULES = {
   cardChoices: 3,
   dealFamilies: 3, // >0 = 不选卡：每次随机直接发这么多种建筑（价值平分）
   dealNeedWeight: 1, // 不选卡时，缺口大的建筑被抽中的权重（0 = 完全随机）
-  dealNeedWeightEnd: 0.2, // ≥0：追缺口的权重随回合从 dealNeedWeight 变到这个数（0 = 后期完全按固定比例）
-  dealNeedTurns: 45, // 在第几小回合变到 dealNeedWeightEnd
+  dealNeedWeightEnd: 0, // ≥0：追缺口的权重随回合从 dealNeedWeight 变到这个数（0 = 后期完全按固定比例）
+  dealNeedTurns: 30, // 在第几小回合变到 dealNeedWeightEnd
   arrivalPerPop: 8,
   needMargin: 1.1,
   needMarginEnd: 0, // >0：富余比例随回合从 needMargin 线性变到这个数（比如 1.3 → 0.95）
