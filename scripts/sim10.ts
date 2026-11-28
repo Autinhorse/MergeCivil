@@ -380,6 +380,16 @@ function play(bot: Bot, seed: number, verbose = false): Result {
     while (s.offer) {
       const i = pickCard(s, bot);
       if (process.env.PROBE) { const pk = ((s as unknown as { _picked?: Record<string, number> })._picked ??= {}); for (const it of cardItems(s.offer[i])) pk[it.fam] = (pk[it.fam] ?? 0) + Math.pow(3, it.lvl - 1); }
+      if (process.env.LVSTAT) {
+        const ls = ((s.stats as unknown as { lvDeal?: Record<string, number> }).lvDeal ??= {});
+        for (const it of cardItems(s.offer![i])) {
+          const top = s.buildings.reduce((m, b) => (!b.core && b.fam === it.fam ? Math.max(m, b.lvl) : m), 0);
+          const k = top ? `d${it.lvl - top}` : 'new';
+          ls[k] = (ls[k] ?? 0) + 1;
+          ls[`L${it.lvl}`] = (ls[`L${it.lvl}`] ?? 0) + 1;
+          ls.n = (ls.n ?? 0) + 1;
+        }
+      }
       chooseCard(s, i); doMerges(s, bot, tl);
     }
     tryPlot(s, bot, tl);
@@ -471,6 +481,15 @@ function summary(rs: Result[], label: string) {
       if (n) parts.push(`${nm[k]} ${pct(g / n)}/${pct(y / n)}/${pct(r / n)}`);
     }
     console.log(`  资源绿/黄/红回合占比：${parts.join('，')}`);
+    if (process.env.LVSTAT) {
+      const agg: Record<string, number> = {};
+      for (const r of rs) for (const [k, v] of Object.entries((r.stats as unknown as { lvDeal?: Record<string, number> }).lvDeal ?? {})) agg[k] = (agg[k] ?? 0) + v / rs.length;
+      const n = agg.n || 1;
+      const ks = Object.keys(agg).filter((k) => k.startsWith('d')).sort((a, b) => Number(b.slice(1)) - Number(a.slice(1)));
+      console.log(`  发的建筑 vs 地图上同种最高级（每局 ${f1(n)} 座）：${ks.map((k) => `${Number(k.slice(1)) >= 0 ? '+' : ''}${k.slice(1)} 级 ${pct(agg[k] / n)}`).join('，')}，地图上还没有 ${pct((agg.new ?? 0) / n)}`);
+      const ls = Object.keys(agg).filter((k) => k.startsWith('L')).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+      console.log(`  发的建筑等级：${ls.map((k) => `Lv${k.slice(1)} ${pct(agg[k] / n)}`).join('，')}`);
+    }
     const fu = (k: string) => avg(rs.map((r) => (r.stats as unknown as { full?: Record<string, number> }).full?.[k] ?? 0));
     const by = (k: string) => avg(rs.map((r) => (r.stats as unknown as { apBy?: Record<string, number> }).apBy?.[k] ?? 0));
     const n = fu('n') || 1;
