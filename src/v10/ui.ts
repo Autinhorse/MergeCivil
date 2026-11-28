@@ -57,7 +57,7 @@ function render() {
     const stock = (MATERIALS as string[]).includes(k) ? ` · 存 ${fmt(s.res[k as keyof typeof s.res])}` : '';
     return `<div class="light ${c}" title="供给 ÷ 需求 = ${r.toFixed(2)}${stock}"><span>${ICONS[k]} ${NAMES[k]}</span><b>${r > 99 ? '99+' : r.toFixed(2)}</b></div>`;
   }).join('');
-  const offerItems = s.offer ? s.offer.flatMap(cardItems) : [];
+  const offerItems = s.offer ? s.offer.flatMap(cardItems) : s.lastDeal ?? [];
   const offerGroups = new Map<string, number>();
   for (const it of offerItems) { const k = `${it.fam}|${it.lvl}`; offerGroups.set(k, (offerGroups.get(k) ?? 0) + 1); }
   const offerHtml = [...offerGroups].map(([k, n]) => { const [fam, l] = k.split('|'); return `<span class="chip" style="--c:${color({ fam })}">${FAMILY[fam].icon} ${FAMILY[fam].name} Lv${l} ×${n}</span>`; }).join('');
@@ -79,9 +79,9 @@ function render() {
     <div id="boardBox" style="width:${view.w * cell}px;height:${view.h * cell}px;--cell:${cell}px">${boardHtml()}</div>
     <aside>
       <section>
-        <h3>发建筑 <small>本大回合还剩 ${s.picksLeft} 次</small></h3>
+        <h3>${RULES.autoDeal ? '本大回合发来的建筑 <small>开局和每个大回合开始自动发</small>' : `发建筑 <small>本大回合还剩 ${s.picksLeft} 次</small>`}</h3>
         <div class="offer">${offerHtml || '<span class="dim">本大回合已发完</span>'}</div>
-        <button id="take" ${s.offer ? '' : 'disabled'}>领取这批建筑</button>
+        ${RULES.autoDeal ? '' : `<button id="take" ${s.offer ? '' : 'disabled'}>领取这批建筑</button>`}
         <button id="end" class="primary" ${s.over ? 'disabled' : ''}>结束回合 ▶</button>
         ${s.offer ? '<p class="dim small">结束回合时没领的会自动领。</p>' : ''}
       </section>

@@ -50,6 +50,7 @@ export interface State {
   stats: Stats;
   goodsStart?: number; // 进入生活用品时代的回合
   dda?: number; // 后台动态难度：发卡量倍数（玩家看不到）
+  lastDeal?: Item[]; // 这个大回合发了哪些建筑（界面显示用）
   rs: number; // 随机数状态（存在 state 里，复制局面不影响原局）
 }
 
@@ -656,6 +657,7 @@ export function chooseCard(s: State, idx: number): string | null {
   s.picksLeft = Math.max(0, s.picksLeft - 1);
   s.offer = null;
   const items = cardItems(c).sort((a, b) => b.lvl - a.lvl);
+  (s.lastDeal ??= []).push(...items.map((it) => ({ ...it })));
   for (const it of items) { s.stats.arrived++; land(s, it); }
   if (s.picksLeft > 0) s.offer = genOffer(s); // 大回合里还有选卡机会
   return null;
@@ -812,7 +814,9 @@ export function endTurn(s: State): TurnReport {
   releaseWarehouse(s);
   if (!s.over) autoFillLow(s);
   s.picksLeft = s.over ? 0 : RULES.turnsPerRound;
+  s.lastDeal = [];
   s.offer = s.over ? null : genOffer(s);
+  if (RULES.autoDeal) while (s.offer) chooseCard(s, 0); // 2026-11-28 Rex：每个大回合开始自动发，不用手动领
   s.log = s.log.slice(0, 80);
   return rep!;
 }
@@ -938,6 +942,7 @@ export function newGame(opts: NewGameOpts = {}): State {
   s.ap = apPerTurn(s) * RULES.turnsPerRound;
   s.stats.apBase += s.ap;
   s.offer = genOffer(s);
+  if (RULES.autoDeal) while (s.offer) chooseCard(s, 0);
   s.log.unshift('部落在一块土地上点燃了村庄中心。');
   return s;
 }

@@ -203,6 +203,7 @@ export const RULES = {
   goodsPenalty: 1,
   goodsRamp: 30, // >0：进入时代后这么多小回合内需求从 0 涨到 goodsBase（0 = 一进时代就要满额）
   // 电力：Lv≥powerFromLevel 的建筑每座吃 powerDraw（折合 Lv1，再按合并放大），电不够就按比例减产
+  autoDeal: true, // 开局和每个大回合开始自动发完本回合的建筑（玩家不用点领取）
   capMode: 'era' as string, // 合并等级上限：'core' = 村庄中心等级 + mergeCapOffset；'era' = max(村庄中心等级, 时代 + 2)
   mergeCapOffset: 0,
   overCapMax: 0, // 软上限：超过上限几级以内还能合（要额外行动力）
