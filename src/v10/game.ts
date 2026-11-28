@@ -845,6 +845,9 @@ function resolveSmallTurn(s: State): TurnReport {
     const lc = ((s.stats as unknown as { lights?: Record<string, Record<Light, number>> }).lights ??= {});
     const L = resourceLights(s, e);
     for (const [k, v] of Object.entries(L)) { const c = (lc[k] ??= { g: 0, y: 0, r: 0 }); c[v]++; }
+    // 只看本回合产出、不算库存的灯（调参用）
+    const lp = ((s.stats as unknown as { lightsProd?: Record<string, Record<Light, number>> }).lightsProd ??= {});
+    for (const k of MATERIALS) if (e.matDemand[k] > 1e-6) { const r = e.matProd[k] / e.matDemand[k]; const v: Light = r >= RULES.lightGreen ? 'g' : r >= 1 ? 'y' : 'r'; const c = (lp[k] ??= { g: 0, y: 0, r: 0 }); c[v]++; }
     // 压力曲线：按大回合分段，记“有黄（或更差）/ 有红 / 两项以上红”的回合数
     const reds = Object.values(L).filter((v) => v === 'r').length, ys = Object.values(L).filter((v) => v !== 'g').length;
     // 2026-11-28 Rex：后台偷偷调难度。从第 ddaFromRound 个大回合起：全绿就慢慢少发，两项以上红就多发，一项红/有黄不动

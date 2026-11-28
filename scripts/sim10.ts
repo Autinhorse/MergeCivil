@@ -483,6 +483,16 @@ function summary(rs: Result[], label: string) {
       if (n) parts.push(`${nm[k]} ${pct(g / n)}/${pct(y / n)}/${pct(r / n)}`);
     }
     console.log(`  资源绿/黄/红回合占比：${parts.join('，')}`);
+    {
+      const q: string[] = [];
+      for (const k of MATERIALS) {
+        let g = 0, y = 0, r = 0;
+        for (const x of rs) { const c = (x.stats as unknown as { lightsProd?: Record<string, Record<string, number>> }).lightsProd?.[k]; if (c) { g += c.g; y += c.y; r += c.r; } }
+        const n = g + y + r;
+        if (n) q.push(`${nm[k]} ${pct(g / n)}/${pct(y / n)}/${pct(r / n)}（用了 ${(n / rs.length).toFixed(0)} 回合）`);
+      }
+      console.log(`  原料只看产出（不算库存）绿/黄/红：${q.join('，')}`);
+    }
     if (process.env.LVSTAT) {
       const agg: Record<string, number> = {};
       for (const r of rs) for (const [k, v] of Object.entries((r.stats as unknown as { lvDeal?: Record<string, number> }).lvDeal ?? {})) agg[k] = (agg[k] ?? 0) + v / rs.length;
