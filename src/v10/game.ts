@@ -893,7 +893,7 @@ function resolveSmallTurn(s: State): TurnReport {
   // 村庄中心：安居人口够了、原料够了就自动升级
   let coreUp = false;
   const next = CORE_LEVELS[s.coreLevel + 1];
-  if (!s.over && next && e.settled >= next.settled * (s.coreLevel + 1 >= 3 ? RULES.coreSettledMult : 1)) {
+  if (!RULES.manualCoreUp && !s.over && next && e.settled >= next.settled * (s.coreLevel + 1 >= 3 ? RULES.coreSettledMult : 1)) {
     const cost = next.cost ?? {};
     if ((Object.entries(cost) as [ResKey, number][]).every(([k, v]) => s.res[k] >= v)) {
       for (const [k, v] of Object.entries(cost) as [ResKey, number][]) s.res[k] -= v;
@@ -945,6 +945,25 @@ export function newGame(opts: NewGameOpts = {}): State {
   if (RULES.autoDeal) while (s.offer) chooseCard(s, 0);
   s.log.unshift('部落在一块土地上点燃了村庄中心。');
   return s;
+}
+
+/** 手动升级（2026-11-28 Rex）：条件满足时提示玩家按一下。返回 null = 可以升；否则是还差什么 */
+export function coreUpgradeBlock(s: State): string | null {
+  const next = CORE_LEVELS[s.coreLevel + 1];
+  if (s.over || !next) return '已经是最高级';
+  const need = next.settled * (s.coreLevel + 1 >= 3 ? RULES.coreSettledMult : 1);
+  const st = economy(s).settled;
+  if (st < need) return `安居人口 ${Math.floor(st)}/${need}`;
+  const lack = (Object.entries(next.cost ?? {}) as [ResKey, number][]).filter(([k, v]) => s.res[k] < v).map(([k, v]) => `${RES_INFO[k].name} ${Math.floor(s.res[k])}/${v}`);
+  return lack.length ? `还差 ${lack.join('、')}` : null;
+}
+/** 玩家按下升级：扣原料、升级（升级里会把之前因为等级上限没合的组一次合掉） */
+export function pressCoreUpgrade(s: State): string | null {
+  const why = coreUpgradeBlock(s);
+  if (why) return why;
+  for (const [k, v] of Object.entries(CORE_LEVELS[s.coreLevel + 1].cost ?? {}) as [ResKey, number][]) s.res[k] -= v;
+  upgradeCore(s);
+  return null;
 }
 
 export const cloneState = (s: State): State => structuredClone(s);

@@ -57,3 +57,5 @@ button.primary { background: #c9822e; border-color: #e09a45; font-weight: 700; }
 .bld .why.go { background: #3f8f3a; animation: pulse 1s infinite alternate; }
 @keyframes pulse { from { opacity: .6; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .bld .why.go { animation: none; } }
+.stat.up.ready { background: #5a4a1e; box-shadow: 0 0 0 2px #e8c35a; }
+.stat.up button { margin-top: 2px; padding: 3px 10px; font-size: 13px; }

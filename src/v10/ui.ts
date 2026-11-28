@@ -3,10 +3,11 @@ import './ui.css';
 import { CORE_LEVELS, ERAS, FAMILY, MATERIALS, RES_INFO, RULES, rowOf, type Row } from './data';
 import {
   apPerTurn, buyPlot, buyablePlots, byId, cardItems, chooseCard, economy, endTurn, fits, groupOf, levelCap, moveCost,
-  mergeCap, move, nameOfB, newGame, planMerge, ownedCount, plotAp, plotQuota, previewMove, resourceRatios, rotate, rowOfB, sellBuilding, sellWarehouse,
+  coreUpgradeBlock, mergeCap, move, pressCoreUpgrade, nameOfB, newGame, planMerge, ownedCount, plotAp, plotQuota, previewMove, resourceRatios, rotate, rowOfB, sellBuilding, sellWarehouse,
   type Building, type State,
 } from './game';
 
+RULES.manualCoreUp = true; // 测试版：村庄中心满足条件时提示，玩家按一下升级
 const SAVE_KEY = 'merge-civ-v10-save';
 let s: State = load() ?? newGame();
 let sel: number | null = null;
@@ -72,6 +73,7 @@ function render() {
     <div class="stat"><span>行动力</span><b>${s.ap}</b><i>每大回合 +${apPerTurn(s) * RULES.turnsPerRound}</i></div>
     <div class="stat"><span>幸福（人均）</span><b class="${e.happyRatio < 0 ? 'neg' : ''}">${e.happyRatio.toFixed(2)}</b><i>${tiers}${s.danger ? ` · <span class="neg">危险 ${s.danger}/${RULES.failTurns}</span>` : ''}</i></div>
     <div class="stat"><span>地块</span><b>${ownedCount(s)}/${plotQuota(s)}</b><i>最高合到 Lv${mergeCap(s)}</i></div>
+    ${(() => { const why = coreUpgradeBlock(s); return CORE_LEVELS[s.coreLevel + 1] ? `<div class="stat up ${why ? '' : 'ready'}"><span>村庄中心升级</span>${why ? `<i>${why}</i>` : `<button id="coreUp" class="primary">可以升级了！升到 Lv${s.coreLevel + 1}</button>`}</div>` : ''; })()}
     <div class="btns"><button id="newGame">新开一局</button></div>
   </header>
   <div class="lights">${lights}</div>
@@ -156,8 +158,9 @@ function bind() {
     else { el.dataset.sure = '1'; el.textContent = '再点一次确认放弃本局'; }
   });
   q('newGame2')?.addEventListener('click', restart);
+  q('coreUp')?.addEventListener('click', () => act(() => { const lv = s.coreLevel, n = s.buildings.length; const err = pressCoreUpgrade(s); if (!err) say(`村庄中心升到 Lv${s.coreLevel}${s.buildings.length < n ? '，挨着的建筑一起合并了' : ''}`); return err ?? (s.coreLevel > lv ? null : null); }));
   q('take')?.addEventListener('click', () => { act(() => chooseCard(s, 0)); });
-  q('end')?.addEventListener('click', () => { act(() => { const lv = s.coreLevel; endTurn(s); if (s.coreLevel > lv) say(`村庄中心升到 Lv${s.coreLevel}！`); return null; }); });
+  q('end')?.addEventListener('click', () => { act(() => { endTurn(s); if (!coreUpgradeBlock(s)) say('村庄中心可以升级了，点上方按钮'); return null; }); });
   q('rot')?.addEventListener('click', () => sel != null && act(() => rotate(s, sel!).err, true));
   q('mergeHere')?.addEventListener('click', () => { const b = sel != null ? byId(s, sel) : null; if (b) act(() => reportMerge(move(s, b.id, b.x, b.y)), true); });
   q('sellB')?.addEventListener('click', () => { if (sel == null) return; const id = sel; sel = null; act(() => sellBuilding(s, id)); });
