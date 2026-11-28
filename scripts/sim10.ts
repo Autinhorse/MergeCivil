@@ -157,6 +157,14 @@ const LIGHTS = process.env.LIGHTS !== '0';
 const PICK = process.env.PICK ?? 'priority'; // priority = Rex 的规则；old = 合并次数×10+返还−花费
 const PRI_RED = Number(process.env.PRI_RED ?? 100), PRI_RED_BASE = Number(process.env.PRI_RED_BASE ?? 20), PRI_YELLOW = Number(process.env.PRI_YELLOW ?? 10);
 const LIGHT_RED = Number(process.env.LIGHT_RED ?? 30), LIGHT_YELLOW = Number(process.env.LIGHT_YELLOW ?? 10);
+/** 行动力按用途记账：挪近（为下回合布局）/ 合并（最后挪的那一座）/ 腾地方 */
+function tagMove<T>(s: State, tag: string, f: () => T): T {
+  const before = s.stats.apMove;
+  const r = f();
+  const by = ((s.stats as unknown as { apBy?: Record<string, number> }).apBy ??= {});
+  by[tag] = (by[tag] ?? 0) + (s.stats.apMove - before);
+  return r;
+}
 function doMerges(s: State, bot: Bot, tl: TurnLog) {
   if (bot === 'novice') return;
   for (let guard = 0; guard < 60; guard++) {
@@ -167,7 +175,7 @@ function doMerges(s: State, bot: Bot, tl: TurnLog) {
       // 熟练：剩下的行动力做两步布局（留够下一步的钱：下回合还能接着合）
       if (bot === 'expert') {
         const sm = setupMove(s);
-        if (sm && sm.cost <= s.ap - plotReserve(s)) { move(s, sm.id, sm.x, sm.y, sm.rot); continue; }
+        if (sm && sm.cost <= s.ap - plotReserve(s)) { tagMove(s, 'setup', () => move(s, sm.id, sm.x, sm.y, sm.rot)); continue; }
       }
       return;
     }
@@ -213,7 +221,7 @@ function doMerges(s: State, bot: Bot, tl: TurnLog) {
         { const pc = ((s.stats as unknown as { pick?: Record<string, number> }).pick ??= {}); const tier = gain.length ? 'gain' : even.length ? 'even' : best.u > 0 ? 'lossFix' : 'loss'; pc[tier] = (pc[tier] ?? 0) + 1; pc.opts = (pc.opts ?? 0) + ev.length; pc.n = (pc.n ?? 0) + 1; if (ev.some((x) => x.u > 0)) pc.anyU = (pc.anyU ?? 0) + 1; }
         // 亏行动力、又不补任何红黄资源的合并：留够买地的钱才做
         if (!gain.length && !even.length && best.u <= 0 && best.c.cost > s.ap - plotReserve(s)) return;
-        move(s, best.c.id, best.c.x, best.c.y, best.c.rot);
+        tagMove(s, 'merge', () => move(s, best.c.id, best.c.x, best.c.y, best.c.rot));
         continue;
       }
       const cand = [...ok].sort((a, b) => fix(b) - fix(a) || a.cost - b.cost).slice(0, 8);
@@ -226,7 +234,7 @@ function doMerges(s: State, bot: Bot, tl: TurnLog) {
       }
       if (pick.cost > s.ap - plotReserve(s) && bestV < 10) return;
     }
-    move(s, pick.id, pick.x, pick.y, pick.rot);
+    tagMove(s, 'merge', () => move(s, pick.id, pick.x, pick.y, pick.rot));
   }
 }
 
@@ -336,7 +344,7 @@ function makeRoom(s: State, it: Item): boolean {
     if (!ok) continue;
     for (const p of plan) {
       if (!byId(s, p.id)) continue; // 前面挪动触发了合并，这座已经合掉了
-      const r = move(s, p.id, p.x, p.y, p.rot);
+      const r = tagMove(s, 'room', () => move(s, p.id, p.x, p.y, p.rot));
       if (r.err) return false;
       roomStats.moved++;
     }
@@ -455,6 +463,12 @@ function summary(rs: Result[], label: string) {
       if (n) parts.push(`${nm[k]} ${pct(g / n)}/${pct(y / n)}/${pct(r / n)}`);
     }
     console.log(`  资源绿/黄/红回合占比：${parts.join('，')}`);
+    const fu = (k: string) => avg(rs.map((r) => (r.stats as unknown as { full?: Record<string, number> }).full?.[k] ?? 0));
+    const by = (k: string) => avg(rs.map((r) => (r.stats as unknown as { apBy?: Record<string, number> }).apBy?.[k] ?? 0));
+    const n = fu('n') || 1;
+    console.log(`  合并完整成本（每局 ${f1(fu('n'))} 次）：用到的 3 座里落地后被挪过的 平均 ${f1(fu('moved') / n)} 座（0 座 ${pct(fu('m0') / n)}，1 座 ${pct(fu('m1') / n)}，2 座 ${pct(fu('m2') / n)}，3 座 ${pct(fu('m3') / n)}）；平均花 ${f1(fu('spent') / n)}、返还 ${f1(fu('refund') / n)}；亏 ${pct(fu('loss') / n)}，持平 ${pct(fu('even') / n)}，赚 ${pct(fu('gain') / n)}`);
+    const tot = by('setup') + by('merge') + by('room') + avg(rs.map((r) => r.stats.apPlot)) || 1;
+    console.log(`  行动力去向（每局）：挪近布局 ${f1(by('setup'))}（${pct(by('setup') / tot)}），合并时挪 ${f1(by('merge'))}（${pct(by('merge') / tot)}），腾地方 ${f1(by('room'))}（${pct(by('room') / tot)}），买地 ${f1(avg(rs.map((r) => r.stats.apPlot)))}（${pct(avg(rs.map((r) => r.stats.apPlot)) / tot)}）；收入里合并返还 ${f1(avg(rs.map((r) => r.stats.apRefund)))}`);
     const pk = (k: string) => f1(avg(rs.map((r) => (r.stats as unknown as { pick?: Record<string, number> }).pick?.[k] ?? 0)));
     console.log(`  合并选择（每局）：决策 ${pk('n')} 次，平均每次可选 ${f1(Number(pk('opts')) / Math.max(1, Number(pk('n'))))} 种；选了净赚 ${pk('gain')}，不亏 ${pk('even')}，亏但补红黄 ${pk('lossFix')}，亏且全绿 ${pk('loss')}；有能补红黄的选项 ${pk('anyU')} 次`);
     const segs: [string, string][] = [['a', '1–10'], ['b', '11–30'], ['c', '31–60'], ['d', '61+']];

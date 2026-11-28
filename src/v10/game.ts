@@ -5,7 +5,7 @@ import {
 } from './data';
 
 export interface Spot { x: number; y: number; w: number; h: number }
-export interface Building extends Spot { id: number; fam: string; lvl: number; core?: boolean }
+export interface Building extends Spot { id: number; fam: string; lvl: number; core?: boolean; spent?: number /* 落地以后挪它一共花的行动力 */ }
 export interface Item { fam: string; lvl: number }
 export type Card =
   | { kind: 'bundle'; fam: string; lvl: number; count: number; reason: string }
@@ -308,6 +308,16 @@ export function autoMerge(s: State, anchor: Building, landing = false): MergeSte
     const p = planMerge(s, cur, combo, landing);
     if (!p) break;
     const ids = new Set(p.ids);
+    // 完整成本记账：这次合并用到的建筑，落地以后一共被挪了几座、花了多少行动力
+    {
+      const fc = ((s.stats as unknown as { full?: Record<string, number> }).full ??= {});
+      const used = s.buildings.filter((u) => ids.has(u.id));
+      const spent = used.reduce((a, u) => a + (u.spent ?? 0), 0);
+      const moved = used.filter((u) => (u.spent ?? 0) > 0).length;
+      fc.n = (fc.n ?? 0) + 1; fc.spent = (fc.spent ?? 0) + spent; fc.moved = (fc.moved ?? 0) + moved; fc.refund = (fc.refund ?? 0) + p.refund;
+      fc[`m${Math.min(moved, 3)}`] = (fc[`m${Math.min(moved, 3)}`] ?? 0) + 1;
+      if (spent > p.refund) fc.loss = (fc.loss ?? 0) + 1; else if (spent < p.refund) fc.gain = (fc.gain ?? 0) + 1; else fc.even = (fc.even ?? 0) + 1;
+    }
     if (combo === 0) leftovers.push(...groupOf(s, cur).filter((b) => !ids.has(b.id)));
     s.buildings = s.buildings.filter((u) => !ids.has(u.id));
     cur = addBuilding(s, { fam: p.fam, lvl: p.to }, p.spot);
@@ -354,6 +364,7 @@ export function move(s: State, id: number, x: number, y: number, rot = false): M
   if (!fits(s, x, y, w, h, new Set([id]))) return { err: '放不下', merges: [] };
   s.ap -= c;
   s.stats.apMove += c;
+  b.spent = (b.spent ?? 0) + c;
   Object.assign(b, { x, y, w, h });
   s.lastPlaced = { x, y, w, h };
   return { err: null, merges: autoMerge(s, b) };
