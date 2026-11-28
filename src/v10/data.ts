@@ -66,9 +66,9 @@ export interface Family {
 const N = (...xs: string[]) => xs;
 export const FAMILIES: Family[] = [
   { id: 'field', name: '田地', icon: '🌾', era: 1, start: 1, row: { food: 4 }, names: N('浆果树丛', '小块田地', '田地', '灌溉农田', '庄园农场', '梯田庄园', '领主庄园', '轮作农场', '机械化农场', '现代农业基地', '智能温室', '垂直生态农场') },
-  { id: 'lumber', name: '伐木场', icon: '🪓', era: 1, start: 1, row: { wood: 3 }, stages: [{ from: 8, row: { coal: 3 } }], names: N('收集木材', '伐木场', '木材工坊', '锯木坊', '木工作坊', '皇家林场', '水力锯木厂', '煤矿', '竖井煤矿', '大煤矿', '机械化煤矿', '煤炭气化厂') },
-  { id: 'house', name: '住房', icon: '🏠', era: 1, start: 1, row: { housing: 3 }, names: N('窝棚', '小住房', '住房', '土坯房', '石屋', '联排屋', '木筋楼', '市民宅邸', '工人公寓', '高层住宅', '智能社区', '生态穹顶城') },
-  { id: 'quarry', name: '采石场', icon: '⛏️', era: 1, start: 1, row: { stone: 3 }, stages: [{ from: 3, row: { copper: 3 } }, { from: 5, row: { iron: 3 } }], names: N('收集石头', '采石场', '青铜矿场', '铜锡矿坑', '铁矿井', '深层铁矿', '矿业公会', '大铁矿山', '蒸汽铁矿', '露天铁矿场', '自动化铁矿', '太空铁矿站') },
+  { id: 'lumber', weight: 2, name: '伐木场', icon: '🪓', era: 1, start: 1, row: { wood: 3 }, stages: [{ from: 8, row: { coal: 3 } }], names: N('收集木材', '伐木场', '木材工坊', '锯木坊', '木工作坊', '皇家林场', '水力锯木厂', '煤矿', '竖井煤矿', '大煤矿', '机械化煤矿', '煤炭气化厂') },
+  { id: 'house', weight: 1.5, name: '住房', icon: '🏠', era: 1, start: 1, row: { housing: 3 }, names: N('窝棚', '小住房', '住房', '土坯房', '石屋', '联排屋', '木筋楼', '市民宅邸', '工人公寓', '高层住宅', '智能社区', '生态穹顶城') },
+  { id: 'quarry', weight: 1.5, name: '采石场', icon: '⛏️', era: 1, start: 1, row: { stone: 3 }, stages: [{ from: 3, row: { copper: 3 } }, { from: 5, row: { iron: 3 } }], names: N('收集石头', '采石场', '青铜矿场', '铜锡矿坑', '铁矿井', '深层铁矿', '矿业公会', '大铁矿山', '蒸汽铁矿', '露天铁矿场', '自动化铁矿', '太空铁矿站') },
   { id: 'altar', name: '祭坛', icon: '🗿', era: 1, start: 2, row: { happy: 3 }, auto: [1, 0], names: N('', '祭坛', '图腾柱', '神庙', '圣殿', '大神殿', '大教堂', '巴洛克教堂', '城市公园', '体育场', '主题乐园', '全息娱乐中心') },
   // 炼制工坊：Rex 定产生活用品
   { id: 'smelter', name: '炼制工坊', icon: '🔥', era: 2, start: 3, row: { goods: 5 }, auto: [0, 2], names: N('', '', '炼制工坊', '青铜铸坊', '铁匠铺', '兵器工坊', '铁匠行会', '精钢锻坊', '机械锻造厂', '重型机械厂', '精密制造厂', '智能锻造中心') },
@@ -80,7 +80,7 @@ export const FAMILIES: Family[] = [
   { id: 'theatre', name: '剧场', icon: '🎭', era: 4, start: 5, row: { happy: 6 }, auto: [1, 1], names: N('', '', '', '', '剧场', '圆形剧场', '大竞技场', '皇家剧院', '歌剧院', '音乐厅', '文化中心', '沉浸式剧场') },
   { id: 'textile', name: '纺织坊', icon: '🧵', era: 4, start: 5, row: { goods: 6 }, auto: [1, 1], names: N('', '', '', '', '纺织坊', '织布坊', '丝绸工坊', '纺织行会', '呢绒工场', '纺织厂', '服装厂', '智能纺织厂') },
   { id: 'bank', name: '银行', icon: '🏦', era: 6, start: 7, row: { goods: 8 }, auto: [1, 1], names: N('', '', '', '', '', '', '银行', '商业银行', '国家银行', '证券交易所', '金融中心', '数字货币中心') },
-  { id: 'plant', name: '电厂', icon: '⚡', era: 8, start: 9, row: { coal: -2, power: 4 * 3 }, names: N('', '', '', '', '', '', '', '', '火力发电厂', '核电站', '太阳能电站', '轨道太阳能站') },
+  { id: 'plant', weight: 3, name: '电厂', icon: '⚡', era: 8, start: 9, row: { coal: -2, power: 4 * 3 }, names: N('', '', '', '', '', '', '', '', '火力发电厂', '核电站', '太阳能电站', '轨道太阳能站') },
 ];
 export const FAMILY: Record<string, Family> = Object.fromEntries(FAMILIES.map((f) => [f.id, f]));
 
@@ -170,21 +170,22 @@ export const CORE_LEVELS: CoreLevel[] = [
 ];
 export const CORE = {
   levelCapOffset: 0, // 0 = 其他建筑最高等级 = 村庄中心等级
-  plotsPerLevel: 1, // 可拥有地块数 = 村庄中心等级 × 这个数
+  plotsPerLevel: 4, // 可拥有地块数 = 村庄中心等级 × 这个数
 };
 
+// 2026-11-28 基准（Rex 定）：随机落地、每种建筑只发它地图上最高两级、不选卡直接发 3 种、按固定比例随机、仓库按座数
 export const RULES = {
   // 地图
   plotSize: 8,
-  worldPlots: 5, // 世界是 5×5 块地
+  worldPlots: 7, // 世界是 5×5 块地
   // 人口：每回合 +（popBase + popPerTurn × 回合数），不管玩家做什么
   startPop: 4,
   popBase: 1,
   popPerTurn: 0.08,
-  popRate: 0, // 按比例增长：每回合 + 当前人口 × popRate（比如 0.03 = 3%）
+  popRate: 0.02, // 按比例增长：每回合 + 当前人口 × popRate（比如 0.03 = 3%）
   foodPerPerson: 1,
-  needPerLevel: 1, // 每人需求随村庄中心等级放大：× needPerLevel^(等级 − needFromLevel)。1 = 不变
-  needFromLevel: 1, // 从村庄中心第几级开始放大
+  needPerLevel: 1.3, // 每人需求随村庄中心等级放大：× needPerLevel^(等级 − needFromLevel)。1 = 不变
+  needFromLevel: 5, // 从村庄中心第几级开始放大
   // 幸福度（生命值）：= 作坊幸福 + 建筑自带幸福 − 人口 × 每人需求 − 扣分
   // 每人幸福需求按回合慢慢涨（2026-11-27 Rex 定）：= happyBase + happyPerTurn × 回合数，最多 happyMax
   happyBase: 1,
@@ -195,18 +196,18 @@ export const RULES = {
   goodsBase: 0.5,
   goodsPerTurn: 0.005,
   goodsPenalty: 1,
-  goodsRamp: 0, // >0：进入时代后这么多小回合内需求从 0 涨到 goodsBase（0 = 一进时代就要满额）
+  goodsRamp: 30, // >0：进入时代后这么多小回合内需求从 0 涨到 goodsBase（0 = 一进时代就要满额）
   // 电力：Lv≥powerFromLevel 的建筑每座吃 powerDraw（折合 Lv1，再按合并放大），电不够就按比例减产
   powerFromLevel: 9,
   powerDraw: 0.5,
   // 祭坛从 Lv2 起（新表），开局村庄中心 Lv1 时没有幸福来源：先让村庄中心自带幸福 = 自带住房 × coreHappy（占位）
   coreHappy: 2,
-  coreSettledMult: 1, // 村庄中心 L3 起的升级门槛（安居人口）× 这个数（L2 不变：祭坛 Lv2 才有，开局撑不住），调大 = 升级慢、整局变长
+  coreSettledMult: 2, // 村庄中心 L3 起的升级门槛（安居人口）× 这个数（L2 不变：祭坛 Lv2 才有，开局撑不住），调大 = 升级慢、整局变长
   // 起始级别高的链（银行 Lv7、电厂 Lv9）起始那一级顶 3^((起始级别 − 1) × startScale) 座 Lv1。0 = 顶 1 座，1 = 顶 729 座（Lv7）
   startScale: 0.5,
   // 发卡时缺“换产出才有”的原料（煤要伐木场 Lv8）：true = 直接发那一级；false = 照常发卡片等级，玩家自己合上去
   stageJump: true,
-  lightGreen: 1.1, // 资源红黄绿：供给/需求 ≥ 这个数算绿，≥1 黄，<1 红
+  lightGreen: 1.25, // 资源红黄绿：供给/需求 ≥ 这个数算绿，≥1 黄，<1 红
   homelessPenalty: 1, // 每个无家可归的人扣多少
   hungerPenalty: 1, // 每个吃不饱的人扣多少
   /** 分档。happyPerPop=true 时门槛按“幸福度 ÷ 人口”算（设计文档示意是绝对值 -10，人口上千后会太严，先按人均） */
@@ -220,9 +221,9 @@ export const RULES = {
   failTurns: 2, // 连续几回合低于失败线 Game Over
   // 大回合（2026-11-27 Rex 提议）：几个小回合合成一个大回合。大回合开始时一次给齐这几个小回合的行动力和选卡次数，
   // 玩家操作完点结束，连续结算这几个小回合（人口增长、生产、幸福度按小回合算）。1 = 原来的每回合一结算
-  turnsPerRound: 1,
+  turnsPerRound: 3,
   // 行动力：每回合 apBase + apPerEra × (时代 − 1)，可以存一点到下回合
-  apBase: 5,
+  apBase: 20,
   apPerEra: 1,
   apCarryMax: 5, // 回合末最多留多少到下回合
   moveCostPerCell: 1, // 移动/旋转 = 占地格数 × 这个数
@@ -234,15 +235,15 @@ export const RULES = {
   mergeOnLanding: true, // 新建筑落地凑够 3 座就自动合并
   refundMult: 1, // 合并返还 × 这个数（1 = 返还刚好等于挪一座同级建筑的花费，合并不亏不赚）
   refundOnLanding: false, // 落地触发的合并给不给返还
-  landRandom: false, // true = 新建筑在空位里随机落（2026-11-28 Rex 定）；false = 贴同种 / 靠近上一座
+  landRandom: true, // true = 新建筑在空位里随机落（2026-11-28 Rex 定）；false = 贴同种 / 靠近上一座
   landNextToSame: true, // 新建筑优先落在同种同级建筑旁边（v9 规则）
   // 新建筑：每回合 1 次 cardChoices 选 1，每张卡的价值 ≈ arrivalPerPop × 本回合人口增长（单位 = 几座 Lv1）
   cardChoices: 3,
-  dealFamilies: 0, // >0 = 不选卡：每次随机直接发这么多种建筑（价值平分）
+  dealFamilies: 3, // >0 = 不选卡：每次随机直接发这么多种建筑（价值平分）
   dealNeedWeight: 1, // 不选卡时，缺口大的建筑被抽中的权重（0 = 完全随机）
-  dealNeedWeightEnd: -1, // ≥0：追缺口的权重随回合从 dealNeedWeight 变到这个数（0 = 后期完全按固定比例）
-  dealNeedTurns: 90, // 在第几小回合变到 dealNeedWeightEnd
-  arrivalPerPop: 1.5,
+  dealNeedWeightEnd: 0.2, // ≥0：追缺口的权重随回合从 dealNeedWeight 变到这个数（0 = 后期完全按固定比例）
+  dealNeedTurns: 120, // 在第几小回合变到 dealNeedWeightEnd
+  arrivalPerPop: 8,
   needMargin: 1.1,
   needMarginEnd: 0, // >0：富余比例随回合从 needMargin 线性变到这个数（比如 1.3 → 0.95）
   needMarginTurns: 150, // 在第几小回合变到 needMarginEnd
@@ -251,20 +252,20 @@ export const RULES = {
   arrivalPerFamily: 0, // 每多开放一种建筑，卡牌价值多几成（0.1 = 每多一种 +10%）
   arrivalBaseFamilies: 4, // 开局开放几种（田地、伐木场、住房、采石场）不加
   arrivalMin: 3, // 每张卡至少值几座 Lv1
-  bundleMinCount: 3, // 卡里同种建筑至少几座：价值不够就降级发
+  bundleMinCount: 6, // 卡里同种建筑至少几座：价值不够就降级发
   // 时代升级后旧时代等级只补齐（2026-11-27 Rex 提议，先做成开关）：
   // 开着时，每个时代发卡的最低等级 = eraCardLevel[时代]；低于它的等级只补到凑满 3 座为止，之后不再发
   oldLevelFillOnly: false,
   eraCardLevel: [0, 1, 2, 3, 4, 5],
   autoFillGap: 0, // >0 时：比发卡等级低这么多级及以上的零头，每个大回合开始自动补到 3 座（不自动合），之后不再发。Rex 定 3
   autoFillRef: 'card' as 'card' | 'family', // 'family' = 按这种建筑自己的最高等级算“低几级”
-  cardTopLevels: 0, // >0（Rex 定 2）：卡里每种建筑只发它地图上最高的这几个等级，更低的不发、只从最低一级补零头（这时 autoFillGap 不用）
+  cardTopLevels: 2, // >0（Rex 定 2）：卡里每种建筑只发它地图上最高的这几个等级，更低的不发、只从最低一级补零头（这时 autoFillGap 不用）
   cardTopRef: 'family' as 'family' | 'card', // 'family' = 最高 2 级按这种建筑地图上的最高等级；'card' = 按这回合卡牌等级（建筑小、放得下）
   fillRemainders: false, // 发卡时顺便把同种建筑低等级的零头补到 3 座（凑不齐的低级建筑就能合掉）
   // 仓库：放不下的新建筑进仓库，每回合开始按落地规则自动放出（玩家不能选位置）
   warehouseCells: 6,
-  warehouseSlots: 0, // >0 = 仓库按座数算（不管多大），容量 = warehouseSlots + warehouseSlotsPerEra × (时代 − 1)
-  warehouseSlotsPerEra: 0,
+  warehouseSlots: 5, // >0 = 仓库按座数算（不管多大），容量 = warehouseSlots + warehouseSlotsPerEra × (时代 − 1)
+  warehouseSlotsPerEra: 2,
   sellRatio: 0.5, // 卖出返还 = max(sellMin, floor(格数 × sellRatio))；应低于合并返还
   sellMin: 1,
   allowMapSell: true, // 地图上的建筑也能卖
