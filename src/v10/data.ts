@@ -203,6 +203,7 @@ export const RULES = {
   goodsPenalty: 1,
   goodsRamp: 30, // >0：进入时代后这么多小回合内需求从 0 涨到 goodsBase（0 = 一进时代就要满额）
   // 电力：Lv≥powerFromLevel 的建筑每座吃 powerDraw（折合 Lv1，再按合并放大），电不够就按比例减产
+  plantGuarantee: true, // 第一座用电建筑出现、还没有电厂时，下一次发牌保证有电厂
   powerFromLevel: 9,
   powerDraw: 0.5,
   // 祭坛从 Lv2 起（新表），开局村庄中心 Lv1 时没有幸福来源：先让村庄中心自带幸福 = 自带住房 × coreHappy（占位）

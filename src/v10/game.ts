@@ -592,7 +592,10 @@ export function genOffer(s: State): Card[] {
     const nw = RULES.dealNeedWeightEnd >= 0 ? RULES.dealNeedWeight + (RULES.dealNeedWeightEnd - RULES.dealNeedWeight) * Math.min(1, s.turn / Math.max(1, RULES.dealNeedTurns)) : RULES.dealNeedWeight;
     for (const n of ns) w.set(n.fam, (w.get(n.fam) ?? 0) + (fams.length * nw * n.lv1) / tot);
     const picked: string[] = [];
-    while (picked.length < Math.min(RULES.dealFamilies, fams.length)) {
+    // 2026-11-28 Rex：地图上出现第一座用电的建筑（Lv9+）、还没有电厂时，这次发牌保证有电厂
+    if (RULES.plantGuarantee && FAMILY.plant && !s.buildings.some((x) => x.fam === 'plant') && !s.warehouse.some((x) => x.fam === 'plant')
+      && s.buildings.some((x) => !x.core && x.fam !== 'plant' && x.lvl >= RULES.powerFromLevel)) { picked.push('plant'); w.set('plant', w.get('plant') ?? 0); }
+    while (picked.length < Math.min(RULES.dealFamilies, w.size)) {
       const cand = [...w.entries()].filter(([f]) => !picked.includes(f));
       let x = r() * cand.reduce((a, [, v]) => a + v, 0), k = 0;
       while (k < cand.length - 1 && (x -= cand[k][1]) > 0) k++;
