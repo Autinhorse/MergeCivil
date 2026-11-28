@@ -207,7 +207,12 @@ export const RULES = {
   startScale: 0.5,
   // 发卡时缺“换产出才有”的原料（煤要伐木场 Lv8）：true = 直接发那一级；false = 照常发卡片等级，玩家自己合上去
   stageJump: true,
-  lightGreen: 1.25, // 资源红黄绿：供给/需求 ≥ 这个数算绿，≥1 黄，<1 红
+  lightGreen: 1.25,
+  // 后台动态难度（玩家看不到）：每小回合，全绿 → 发卡量倍数 −ddaStep；有红 → +ddaStep；两项红 → +3×ddaStep；限制在 [ddaMin, ddaMax]
+  ddaStep: 0,
+  ddaMin: 0.4,
+  ddaMax: 1.5,
+  ddaFromRound: 10, // 资源红黄绿：供给/需求 ≥ 这个数算绿，≥1 黄，<1 红
   homelessPenalty: 1, // 每个无家可归的人扣多少
   hungerPenalty: 1, // 每个吃不饱的人扣多少
   /** 分档。happyPerPop=true 时门槛按“幸福度 ÷ 人口”算（设计文档示意是绝对值 -10，人口上千后会太严，先按人均） */
@@ -242,7 +247,7 @@ export const RULES = {
   dealFamilies: 3, // >0 = 不选卡：每次随机直接发这么多种建筑（价值平分）
   dealNeedWeight: 1, // 不选卡时，缺口大的建筑被抽中的权重（0 = 完全随机）
   dealNeedWeightEnd: 0.2, // ≥0：追缺口的权重随回合从 dealNeedWeight 变到这个数（0 = 后期完全按固定比例）
-  dealNeedTurns: 120, // 在第几小回合变到 dealNeedWeightEnd
+  dealNeedTurns: 45, // 在第几小回合变到 dealNeedWeightEnd
   arrivalPerPop: 8,
   needMargin: 1.1,
   needMarginEnd: 0, // >0：富余比例随回合从 needMargin 线性变到这个数（比如 1.3 → 0.95）

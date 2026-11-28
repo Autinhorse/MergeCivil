@@ -49,6 +49,7 @@ export interface State {
   log: string[];
   stats: Stats;
   goodsStart?: number; // 进入生活用品时代的回合
+  dda?: number; // 后台动态难度：发卡量倍数（玩家看不到）
   rs: number; // 随机数状态（存在 state 里，复制局面不影响原局）
 }
 
@@ -551,7 +552,7 @@ export function arrivalValue(s: State) {
   const k = RULES.turnsPerRound - Math.max(1, s.picksLeft);
   let pop = s.pop;
   for (let t = 0; t < k; t++) pop += popGrowth(s.turn + t, pop);
-  return Math.max(RULES.arrivalMin, RULES.arrivalPerPop * popGrowth(s.turn + k, pop));
+  return Math.max(RULES.arrivalMin, RULES.arrivalPerPop * popGrowth(s.turn + k, pop) * (s.dda ?? 1));
 }
 /** 价值 V 的卡发几级：保证同种至少 bundleMinCount 座 */
 export function bundleLevel(s: State, V: number) {
@@ -841,6 +842,14 @@ function resolveSmallTurn(s: State): TurnReport {
     for (const [k, v] of Object.entries(L)) { const c = (lc[k] ??= { g: 0, y: 0, r: 0 }); c[v]++; }
     // 压力曲线：按大回合分段，记“有黄（或更差）/ 有红 / 两项以上红”的回合数
     const reds = Object.values(L).filter((v) => v === 'r').length, ys = Object.values(L).filter((v) => v !== 'g').length;
+    // 2026-11-28 Rex：后台偷偷调难度。从第 ddaFromRound 个大回合起：全绿就慢慢少发，两项以上红就多发，一项红/有黄不动
+    if (RULES.ddaStep > 0 && (s.turn - 1) / RULES.turnsPerRound + 1 >= RULES.ddaFromRound) {
+      const d0 = s.dda ?? 1;
+      const d = reds >= 2 ? d0 + RULES.ddaStep * 3 : !ys ? d0 - RULES.ddaStep : reds ? d0 + RULES.ddaStep : d0;
+      s.dda = Math.max(RULES.ddaMin, Math.min(RULES.ddaMax, d));
+      const dd = ((s.stats as unknown as { dda?: number[] }).dda ??= []);
+      dd.push(s.dda);
+    }
     const round = Math.floor((s.turn - 1) / RULES.turnsPerRound) + 1;
     const ph = round <= 10 ? 'a' : round <= 30 ? 'b' : round <= 60 ? 'c' : 'd';
     const pr = ((s.stats as unknown as { pressure?: Record<string, number[]> }).pressure ??= {});
