@@ -184,8 +184,8 @@ export const RULES = {
   popPerTurn: 0.08,
   popRate: 0.02, // 按比例增长：每回合 + 当前人口 × popRate（比如 0.03 = 3%）
   foodPerPerson: 1,
-  needPerLevel: 1.3, // 每人需求随村庄中心等级放大：× needPerLevel^(等级 − needFromLevel)。1 = 不变
-  needFromLevel: 5, // 从村庄中心第几级开始放大
+  needPerLevel: 1.12, // 每人需求随村庄中心等级放大：× needPerLevel^(等级 − needFromLevel)。1 = 不变
+  needFromLevel: 2, // 从村庄中心第几级开始放大
   // 幸福度（生命值）：= 作坊幸福 + 建筑自带幸福 − 人口 × 每人需求 − 扣分
   // 每人幸福需求按回合慢慢涨（2026-11-27 Rex 定）：= happyBase + happyPerTurn × 回合数，最多 happyMax
   happyBase: 1,
@@ -202,7 +202,7 @@ export const RULES = {
   powerDraw: 0.5,
   // 祭坛从 Lv2 起（新表），开局村庄中心 Lv1 时没有幸福来源：先让村庄中心自带幸福 = 自带住房 × coreHappy（占位）
   coreHappy: 2,
-  coreSettledMult: 2, // 村庄中心 L3 起的升级门槛（安居人口）× 这个数（L2 不变：祭坛 Lv2 才有，开局撑不住），调大 = 升级慢、整局变长
+  coreSettledMult: 3, // 村庄中心 L3 起的升级门槛（安居人口）× 这个数（L2 不变：祭坛 Lv2 才有，开局撑不住），调大 = 升级慢、整局变长
   // 起始级别高的链（银行 Lv7、电厂 Lv9）起始那一级顶 3^((起始级别 − 1) × startScale) 座 Lv1。0 = 顶 1 座，1 = 顶 729 座（Lv7）
   startScale: 0.5,
   // 发卡时缺“换产出才有”的原料（煤要伐木场 Lv8）：true = 直接发那一级；false = 照常发卡片等级，玩家自己合上去
