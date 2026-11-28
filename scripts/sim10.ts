@@ -19,6 +19,7 @@ if (process.env.SET)
     const [k0, v] = kv.split('=');
     // CORE.xxx 改村庄中心相关参数（比如 CORE.plotsPerLevel=2），其余改 RULES
     const [obj, k] = k0.startsWith('CORE.') ? [CORE as unknown as Record<string, unknown>, k0.slice(5)] : k0.startsWith('MERGE.') ? [MERGE as unknown as Record<string, unknown>, k0.slice(6)] : [R, k0];
+    if (k0.startsWith('W.')) { const f = FAMILY[k0.slice(2)]; if (!f) throw new Error(`没有建筑 ${k0}`); f.weight = Number(v); continue; } // W.house=2 改出现权重
     if (!(k in obj)) throw new Error(`没有参数 ${k0}`);
     obj[k] = v === 'true' ? true : v === 'false' ? false : isNaN(Number(v)) ? v : Number(v);
   }

@@ -59,6 +59,7 @@ export interface Family {
   /** 自动吃原料：每级吃“这一级对应的原料”，见 tierInputs。数值 = [伐木链那份, 采石链那份]（折合 Lv1） */
   auto?: [number, number];
   names?: string[]; // 各级名字（下标 0 = Lv1）
+  weight?: number; // 不选卡直接发时的出现权重（默认 1）
 }
 
 // 《建筑定义.xlsx》「建筑链 (修改)」16 条链（村庄中心单独规则）。各级名字照表；吃什么原料表里还没写，先用占位
@@ -237,6 +238,8 @@ export const RULES = {
   cardChoices: 3,
   dealFamilies: 0, // >0 = 不选卡：每次随机直接发这么多种建筑（价值平分）
   dealNeedWeight: 1, // 不选卡时，缺口大的建筑被抽中的权重（0 = 完全随机）
+  dealNeedWeightEnd: -1, // ≥0：追缺口的权重随回合从 dealNeedWeight 变到这个数（0 = 后期完全按固定比例）
+  dealNeedTurns: 90, // 在第几小回合变到 dealNeedWeightEnd
   arrivalPerPop: 1.5,
   needMargin: 1.1,
   needMarginEnd: 0, // >0：富余比例随回合从 needMargin 线性变到这个数（比如 1.3 → 0.95）

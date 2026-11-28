@@ -566,9 +566,11 @@ export function genOffer(s: State): Card[] {
   const fams = pool(s);
   // 不选卡模式（2026-11-27 Rex 提议）：随机挑 dealFamilies 种符合条件的建筑，价值平分，直接发（只有一张“卡”，自动拿）
   if (RULES.dealFamilies > 0) {
-    const w = new Map<string, number>(fams.map((f) => [f.id, 1]));
+    const w = new Map<string, number>(fams.map((f) => [f.id, f.weight ?? 1])); // 固定出现权重（2026-11-28 Rex：不追缺口）
     const tot = ns.reduce((a, n) => a + n.lv1, 0) || 1;
-    for (const n of ns) w.set(n.fam, (w.get(n.fam) ?? 0) + (fams.length * RULES.dealNeedWeight * n.lv1) / tot);
+    // 追缺口的权重随回合减弱：前期帮玩家补（没压力），后期只按固定比例（玩家自己顾）
+    const nw = RULES.dealNeedWeightEnd >= 0 ? RULES.dealNeedWeight + (RULES.dealNeedWeightEnd - RULES.dealNeedWeight) * Math.min(1, s.turn / Math.max(1, RULES.dealNeedTurns)) : RULES.dealNeedWeight;
+    for (const n of ns) w.set(n.fam, (w.get(n.fam) ?? 0) + (fams.length * nw * n.lv1) / tot);
     const picked: string[] = [];
     while (picked.length < Math.min(RULES.dealFamilies, fams.length)) {
       const cand = [...w.entries()].filter(([f]) => !picked.includes(f));
