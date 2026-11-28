@@ -36,40 +36,69 @@ const BOT_NAME: Record<Bot, string> = { novice: '新手（随便挑卡，不挪�
 interface MoveOpt { id: number; x: number; y: number; rot: boolean; cost: number; group: number }
 
 /** 所有“挪 1 座就能凑成 3 座相邻”的走法（不管行动力够不够） */
+/**
+ * 所有“挪 1 座就能凑成 3 座”的走法。2026-11-28 提速（Rex）：按“种类:等级”缓存每座建筑的最好走法，
+ * 移动/合并/落地以后只重算附近有变动的种类；每个大回合开始（新建筑落地后）整体重算一次。
+ * 结果和每次全量重算完全一样（顺序也一样）。
+ */
+type Rect = { x: number; y: number; w: number; h: number };
+const mmCache = new WeakMap<State, { snap: Map<number, string>; opt: Map<number, MoveOpt | null>; owned: number; members: Map<string, string> }>();
+const rectKey = (b: Building) => `${b.fam}:${b.lvl}:${b.x}:${b.y}:${b.w}:${b.h}`;
+function resetMergeCache(s: State) { mmCache.delete(s); }
 function mergeMoves(s: State): MoveOpt[] {
   const cap = levelCap(s);
   const kinds = new Map<string, Building[]>();
   for (const b of s.buildings) if (!b.core && b.lvl + 1 <= cap) { const k = `${b.fam}:${b.lvl}`; (kinds.get(k) ?? kinds.set(k, []).get(k)!).push(b); }
-  const occ = occupancy(s);
+  // 跟上次比：哪些建筑新增/挪动/消失了
+  let cache = mmCache.get(s);
+  const snap = new Map<number, string>(s.buildings.map((b) => [b.id, rectKey(b)]));
+  const changed: Rect[] = [];
+  if (cache) {
+    for (const b of s.buildings) if (cache.snap.get(b.id) !== snap.get(b.id)) { changed.push(b); const o = cache.snap.get(b.id); if (o) { const [, , x, y, w, h] = o.split(':').map(Number); changed.push({ x, y, w, h }); } }
+    for (const [id, k] of cache.snap) if (!snap.has(id)) { const [, , x, y, w, h] = k.split(':').map(Number); changed.push({ x, y, w, h }); }
+  } else cache = { snap, opt: new Map(), owned: -1, members: new Map() };
+  // 买了地（能放的地方变了）就整体重算
+  const full = !mmCache.has(s) || cache.owned !== ownedCount(s);
+  const members = new Map([...kinds].map(([k, l]) => [k, l.map((b) => b.id).join(',')]));
+  const oldMembers = cache.members;
+  mmCache.set(s, { snap, opt: cache.opt, owned: ownedCount(s), members });
+  const near = (a: Rect, b: Rect, m: number) => a.x < b.x + b.w + m && b.x < a.x + a.w + m && a.y < b.y + b.h + m && b.y < a.y + a.h + m;
+  let occ: Int32Array | null = null;
   const out: MoveOpt[] = [];
   for (const list of kinds.values()) {
     if (list.length < MERGE.count) continue;
+    const F = Math.max(list[0].w, list[0].h) + 1;
+    const kk = `${list[0].fam}:${list[0].lvl}`;
+    const dirty = full || oldMembers.get(kk) !== members.get(kk) || list.some((o) => !cache!.opt.has(o.id) || changed.some((c) => near(o, c, F)));
     for (const m of list) {
-      if (groupOf(s, m).length >= MERGE.count) { out.push({ id: m.id, x: m.x, y: m.y, rot: false, cost: 0, group: groupOf(s, m).length }); continue; } // 已经连好：原地点一下就合（自动补齐的零头）
-      const ign = new Set([m.id]);
-      const shapes: [number, number, boolean][] = m.w === m.h ? [[m.w, m.h, false]] : [[m.w, m.h, false], [m.h, m.w, true]];
+      if (!dirty) { const o = cache.opt.get(m.id); if (o) out.push(o); continue; }
+      occ ??= occupancy(s);
       let best: MoveOpt | null = null;
-      for (const o of list) {
-        if (o === m) continue;
-        for (const [w, h, rot] of shapes)
-          for (let y = o.y - h; y <= o.y + o.h; y++)
-            for (let x = o.x - w; x <= o.x + o.w; x++) {
-              const sp = { x, y, w, h };
-              if (!touching(sp, o) || !fits(s, x, y, w, h, ign, occ)) continue;
-              const old = { x: m.x, y: m.y, w: m.w, h: m.h };
-              Object.assign(m, sp);
-              const g = groupOf(s, m).length;
-              Object.assign(m, old);
-              if (g >= MERGE.count && (!best || g > best.group)) best = { id: m.id, x, y, rot, cost: moveCost(m), group: g };
-            }
+      if (groupOf(s, m).length >= MERGE.count) best = { id: m.id, x: m.x, y: m.y, rot: false, cost: 0, group: groupOf(s, m).length }; // 已经连好：原地点一下就合（自动补齐的零头）
+      else {
+        const ign = new Set([m.id]);
+        const shapes: [number, number, boolean][] = m.w === m.h ? [[m.w, m.h, false]] : [[m.w, m.h, false], [m.h, m.w, true]];
+        for (const o of list) {
+          if (o === m) continue;
+          for (const [w, h, rot] of shapes)
+            for (let y = o.y - h; y <= o.y + o.h; y++)
+              for (let x = o.x - w; x <= o.x + o.w; x++) {
+                const sp = { x, y, w, h };
+                if (!touching(sp, o) || !fits(s, x, y, w, h, ign, occ)) continue;
+                const old = { x: m.x, y: m.y, w: m.w, h: m.h };
+                Object.assign(m, sp);
+                const g = groupOf(s, m).length;
+                Object.assign(m, old);
+                if (g >= MERGE.count && (!best || g > best.group)) best = { id: m.id, x, y, rot, cost: moveCost(m), group: g };
+              }
+        }
       }
+      cache.opt.set(m.id, best);
       if (best) out.push(best);
     }
   }
   return out;
 }
-
-/** 两步布局：同种有 ≥3 座但全都落单，把一座挪到另一座旁边 */
 function setupMove(s: State): MoveOpt | null {
   const cap = levelCap(s);
   const kinds = new Map<string, Building[]>();
@@ -202,6 +231,13 @@ function makeRoom(s: State, it: Item): boolean {
   const roomStats = ((s.stats as unknown as { room?: Record<string, number> }).room ??= { tries: 0, ok: 0, moved: 0, ap: 0 });
   roomStats.tries++;
   if (s.ap <= 0) return false;
+  // 局面没变（建筑位置、行动力、地块都一样）时，同一级建筑上次腾不出来，这次也腾不出来
+  let h = s.ap * 31 + ownedCount(s);
+  for (const b of s.buildings) h = (h * 33 + b.id * 7 + b.x * 131 + b.y * 17 + b.w) | 0;
+  const fk = `${it.lvl}:${h}`;
+  const failed = ((s as unknown as { _roomFail?: Set<string> })._roomFail ??= new Set());
+  if (failed.has(fk)) return false;
+  if (failed.size > 5000) failed.clear();
   const [w0, h0] = footprint(it.lvl);
   const shapes = w0 === h0 ? [[w0, h0]] : [[w0, h0], [h0, w0]];
   const bd = ownedBounds(s);
@@ -262,6 +298,7 @@ function makeRoom(s: State, it: Item): boolean {
     roomStats.ap += cd.c;
     return true;
   }
+  failed.add(fk);
   return false;
 }
 
@@ -275,6 +312,7 @@ function play(bot: Bot, seed: number, verbose = false): Result {
   let rounds = 0;
   for (; s.turn <= TURNS && !s.over; rounds++) {
     const tl: TurnLog = { apBlocked: false, plotBlocked: false, quotaBlocked: false };
+    resetMergeCache(s); // 每个大回合开始（新建筑落地后）整体重算一次
     trySell(s, bot);
     if (bot === 'expert') tryPlot(s, bot, tl);
     while (s.offer) {

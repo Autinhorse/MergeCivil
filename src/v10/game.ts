@@ -360,8 +360,24 @@ export function move(s: State, id: number, x: number, y: number, rot = false): M
 
 export const rotate = (s: State, id: number) => { const b = byId(s, id); return b ? move(s, id, b.x, b.y, true) : { err: '找不到建筑', merges: [] }; };
 
+/** 预览用的快速复制：建筑、仓库、地块、资源、统计复制一层；日志、卡牌不复制（预览不会改它们） */
+function previewClone(s: State): State {
+  const st: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(s.stats)) st[k] = Array.isArray(v) ? v.slice() : v && typeof v === 'object' ? { ...v } : v;
+  return {
+    ...s,
+    buildings: s.buildings.map((b) => ({ ...b })),
+    warehouse: s.warehouse.map((it) => ({ ...it })),
+    owned: s.owned.slice(),
+    res: { ...s.res },
+    lastPlaced: s.lastPlaced && { ...s.lastPlaced },
+    stats: st as unknown as Stats,
+    log: [],
+  };
+}
 export function previewMove(s: State, id: number, x: number, y: number, rot = false): MoveResult {
-  const copy = cloneState(s);
+  // 预览只复制会变的部分（日志不复制）
+  const copy = previewClone(s);
   return move(copy, id, x, y, rot);
 }
 
