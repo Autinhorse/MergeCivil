@@ -48,6 +48,7 @@ export interface State {
   over: boolean;
   log: string[];
   stats: Stats;
+  goodsStart?: number; // 进入生活用品时代的回合
   rs: number; // 随机数状态（存在 state 里，复制局面不影响原局）
 }
 
@@ -464,7 +465,12 @@ export const famLevel = (s: State, fam: string, lvl: number) => {
   return Math.max(st, Math.min(top, Math.max(top - RULES.cardTopLevels + 1, L)));
 };
 /** 每人生活用品需求（goodsFromEra 时代以前不要） */
-export const goodsPerPerson = (s: State) => (s.era >= RULES.goodsFromEra ? RULES.goodsBase + RULES.goodsPerTurn * s.turn : 0);
+// 进入生活用品时代后需求从 goodsBase 慢慢涨（goodsRamp 小回合内从 0 涨到 goodsBase，免得一进时代就全城缺货）
+export const goodsPerPerson = (s: State) => {
+  if (s.era < RULES.goodsFromEra) return 0;
+  const since = s.turn - (s.goodsStart ?? s.turn);
+  return RULES.goodsBase * Math.min(1, since / Math.max(1, RULES.goodsRamp)) + RULES.goodsPerTurn * s.turn;
+};
 
 /** 未来 needHorizon 回合的各项缺口，换算成“还差几座 Lv1 该种建筑” */
 export function needs(s: State): { fam: string; lv1: number; reason: string; lvl: number }[] {
@@ -486,7 +492,9 @@ export function needs(s: State): { fam: string; lv1: number; reason: string; lvl
     }
   };
   // 住房、粮食、幸福：目标 = 需求 × needMargin（留一点富余）。都够了的话，就补“富余比例最低”的那一项，免得一直发同一种
-  const M = RULES.needMargin;
+  // 富余比例随回合收紧（2026-11-28 Rex：前 10 来回合没压力，后面越来越紧）：从 needMargin 线性降到 needMarginEnd（在 needMarginTurns 小回合时到底）
+  const tt = Math.min(1, s.turn / Math.max(1, RULES.needMarginTurns));
+  const M = RULES.needMarginEnd > 0 ? RULES.needMargin + (RULES.needMarginEnd - RULES.needMargin) * tt : RULES.needMargin;
   const cats: [keyof Row, number, number, string][] = [
     ['housing', future, e.housing, '住房'],
     ['food', e.foodNeed, e.foodProd, '粮食'],
@@ -504,7 +512,7 @@ export function needs(s: State): { fam: string; lv1: number; reason: string; lvl
   // 原料：净缺口；库存撑不过 3 回合时按整个缺口算，否则减半
   for (const k of MATERIALS) {
     const gap = e.matDemand[k] - e.matProd[k] + (implied[k] ?? 0) - Math.max(0, s.res[k]) / 10;
-    if (gap > 0) add(k, s.res[k] < gap * 3 ? gap + 1 : gap / 2, `原料·${RES_INFO[k].name}`);
+    if (gap > 0) add(k, (s.res[k] < gap * 3 ? gap + 1 : gap / 2) * RULES.matNeedMult, `原料·${RES_INFO[k].name}`);
   }
   // 村庄中心进入新时代要原料
   const next = CORE_LEVELS[s.coreLevel + 1];
@@ -688,12 +696,15 @@ export function economy(s: State, pop = s.pop): Economy {
       }
     }
   }
-  const foodNeed = pop * RULES.foodPerPerson;
-  const fed = Math.min(pop, foodProd / RULES.foodPerPerson);
+  // 2026-11-28 Rex：后期压力越来越大。每人的粮食/住房/幸福/生活用品需求 × needPerLevel^(村庄中心等级 − 1)（住房按“每人要住得更大”算：容量 ÷ 这个数）
+  const sc = Math.pow(RULES.needPerLevel, Math.max(0, s.coreLevel - RULES.needFromLevel));
+  housing /= sc;
+  const foodNeed = pop * RULES.foodPerPerson * sc;
+  const fed = Math.min(pop, foodProd / (RULES.foodPerPerson * sc));
   const hungry = Math.max(0, pop - fed);
   const homeless = Math.max(0, pop - housing);
-  const happyNeed = pop * happyPerPerson(s);
-  const goodsNeed = pop * goodsPerPerson(s);
+  const happyNeed = pop * happyPerPerson(s) * sc;
+  const goodsNeed = pop * goodsPerPerson(s) * sc;
   // 生活用品不够：缺的那部分按“缺几个人的份”扣幸福
   const goodsShort = goodsNeed > 0 ? Math.max(0, pop * (1 - goodsProd / goodsNeed)) : 0;
   const happyPenalty = homeless * RULES.homelessPenalty + hungry * RULES.hungerPenalty + goodsShort * RULES.goodsPenalty;
@@ -739,6 +750,7 @@ function upgradeCore(s: State) {
   const prevEra = s.era;
   s.era = CORE_LEVELS[lvl].era;
   if (s.era > prevEra) s.eraTurn = s.turn;
+  if (s.era >= RULES.goodsFromEra && s.goodsStart == null) s.goodsStart = s.turn;
   s.stats.coreTurn[lvl] = s.turn;
   s.log.unshift(`第 ${s.turn} 回合：村庄中心升级为 ${CORE_LEVELS[lvl].name}${s.era > prevEra ? `，进入${ERAS[s.era].name}时代` : ''}${pushed.length ? `，挪开 ${pushed.length} 座建筑` : ''}`);
   for (const b of pushed.sort((a, b) => b.lvl - a.lvl)) land(s, { fam: b.fam, lvl: b.lvl });
@@ -798,7 +810,15 @@ function resolveSmallTurn(s: State): TurnReport {
   for (const k of MATERIALS) if (e.matDemand[k] > 0 && e.matUsed[k] < e.matDemand[k] - 1e-6) g[k] = (g[k] ?? 0) + 1;
   {
     const lc = ((s.stats as unknown as { lights?: Record<string, Record<Light, number>> }).lights ??= {});
-    for (const [k, v] of Object.entries(resourceLights(s, e))) { const c = (lc[k] ??= { g: 0, y: 0, r: 0 }); c[v]++; }
+    const L = resourceLights(s, e);
+    for (const [k, v] of Object.entries(L)) { const c = (lc[k] ??= { g: 0, y: 0, r: 0 }); c[v]++; }
+    // 压力曲线：按大回合分段，记“有黄（或更差）/ 有红 / 两项以上红”的回合数
+    const reds = Object.values(L).filter((v) => v === 'r').length, ys = Object.values(L).filter((v) => v !== 'g').length;
+    const round = Math.floor((s.turn - 1) / RULES.turnsPerRound) + 1;
+    const ph = round <= 10 ? 'a' : round <= 30 ? 'b' : round <= 60 ? 'c' : 'd';
+    const pr = ((s.stats as unknown as { pressure?: Record<string, number[]> }).pressure ??= {});
+    const row = (pr[ph] ??= [0, 0, 0, 0]);
+    row[0]++; if (ys) row[1]++; if (reds) row[2]++; if (reds >= 2) row[3]++;
   }
   // 失败线
   if (e.happyRatio < RULES.failLine) { s.danger++; s.stats.dangerTurns++; } else s.danger = 0;

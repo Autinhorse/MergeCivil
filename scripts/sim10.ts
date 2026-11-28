@@ -18,7 +18,7 @@ if (process.env.SET)
   for (const kv of process.env.SET.split(',')) {
     const [k0, v] = kv.split('=');
     // CORE.xxx 改村庄中心相关参数（比如 CORE.plotsPerLevel=2），其余改 RULES
-    const [obj, k] = k0.startsWith('CORE.') ? [CORE as unknown as Record<string, unknown>, k0.slice(5)] : [R, k0];
+    const [obj, k] = k0.startsWith('CORE.') ? [CORE as unknown as Record<string, unknown>, k0.slice(5)] : k0.startsWith('MERGE.') ? [MERGE as unknown as Record<string, unknown>, k0.slice(6)] : [R, k0];
     if (!(k in obj)) throw new Error(`没有参数 ${k0}`);
     obj[k] = v === 'true' ? true : v === 'false' ? false : isNaN(Number(v)) ? v : Number(v);
   }
@@ -422,6 +422,13 @@ function summary(rs: Result[], label: string) {
       if (n) parts.push(`${nm[k]} ${pct(g / n)}/${pct(y / n)}/${pct(r / n)}`);
     }
     console.log(`  资源绿/黄/红回合占比：${parts.join('，')}`);
+    const segs: [string, string][] = [['a', '1–10'], ['b', '11–30'], ['c', '31–60'], ['d', '61+']];
+    const pp = segs.map(([k, lab]) => {
+      const tot = [0, 0, 0, 0];
+      for (const x of rs) { const r = (x.stats as unknown as { pressure?: Record<string, number[]> }).pressure?.[k]; if (r) r.forEach((v, i) => (tot[i] += v)); }
+      return tot[0] ? `大回合 ${lab}：有黄 ${pct(tot[1] / tot[0])} 有红 ${pct(tot[2] / tot[0])} 两红 ${pct(tot[3] / tot[0])}` : '';
+    }).filter(Boolean);
+    console.log(`  压力曲线：${pp.join('；')}`);
   }
   console.log(`  ★ 每局一共出现建筑 ${f1(avg(rs.map((r) => r.stats.arrived + RULES.startBuildings.length)))} 座（开局 ${RULES.startBuildings.length} + 选卡 ${f1(avg(rs.map((r) => r.stats.arrived - (r.stats.autoFilled ?? 0))))} + 自动补齐 ${f1(avg(rs.map((r) => r.stats.autoFilled ?? 0)))}），合并 ${f1(avg(rs.map((r) => r.stats.merges + r.stats.landingMerges)))} 次（每大回合 ${f1(avg(rs.map((r) => (r.stats.merges + r.stats.landingMerges) / Math.max(1, r.rounds))))}；手动 ${f1(avg(rs.map((r) => r.stats.merges)))} + 落地自动 ${f1(avg(rs.map((r) => r.stats.landingMerges)))}），局末剩 ${f1(avg(rs.map((r) => r.buildings)))} 座`);
   console.log(`  每局：手动合并 ${f1(avg(rs.map((r) => r.stats.merges)))}，落地自动合并 ${f1(avg(rs.map((r) => r.stats.landingMerges)))}，连锁 ${f1(avg(rs.map((r) => r.stats.combos)))}，来了 ${f1(avg(rs.map((r) => r.stats.arrived)))} 座，进仓库 ${f1(avg(rs.map((r) => r.stats.toWarehouse)))}，丢掉 ${f1(avg(rs.map((r) => r.stats.lost)))}，卖出 ${f1(avg(rs.map((r) => r.stats.sold)))}`);

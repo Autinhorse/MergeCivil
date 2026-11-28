@@ -182,6 +182,8 @@ export const RULES = {
   popPerTurn: 0.08,
   popRate: 0, // 按比例增长：每回合 + 当前人口 × popRate（比如 0.03 = 3%）
   foodPerPerson: 1,
+  needPerLevel: 1, // 每人需求随村庄中心等级放大：× needPerLevel^(等级 − needFromLevel)。1 = 不变
+  needFromLevel: 1, // 从村庄中心第几级开始放大
   // 幸福度（生命值）：= 作坊幸福 + 建筑自带幸福 − 人口 × 每人需求 − 扣分
   // 每人幸福需求按回合慢慢涨（2026-11-27 Rex 定）：= happyBase + happyPerTurn × 回合数，最多 happyMax
   happyBase: 1,
@@ -192,6 +194,7 @@ export const RULES = {
   goodsBase: 0.5,
   goodsPerTurn: 0.005,
   goodsPenalty: 1,
+  goodsRamp: 0, // >0：进入时代后这么多小回合内需求从 0 涨到 goodsBase（0 = 一进时代就要满额）
   // 电力：Lv≥powerFromLevel 的建筑每座吃 powerDraw（折合 Lv1，再按合并放大），电不够就按比例减产
   powerFromLevel: 9,
   powerDraw: 0.5,
@@ -235,7 +238,10 @@ export const RULES = {
   dealFamilies: 0, // >0 = 不选卡：每次随机直接发这么多种建筑（价值平分）
   dealNeedWeight: 1, // 不选卡时，缺口大的建筑被抽中的权重（0 = 完全随机）
   arrivalPerPop: 1.5,
-  needMargin: 1.1, // 发卡时住房/粮食/幸福按需求的几倍算够（原来是 +2）
+  needMargin: 1.1,
+  needMarginEnd: 0, // >0：富余比例随回合从 needMargin 线性变到这个数（比如 1.3 → 0.95）
+  needMarginTurns: 150, // 在第几小回合变到 needMarginEnd
+  matNeedMult: 1, // 原料缺口发卡加权（>1 = 多发伐木场/采石场） // 发卡时住房/粮食/幸福按需求的几倍算够（原来是 +2）
   needHorizon: 1, // 发卡看几回合以后的缺口（人口按增长推算）；试过 5，早期会饿死，先用 1
   arrivalPerFamily: 0, // 每多开放一种建筑，卡牌价值多几成（0.1 = 每多一种 +10%）
   arrivalBaseFamilies: 4, // 开局开放几种（田地、伐木场、住房、采石场）不加
