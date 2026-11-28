@@ -3,7 +3,7 @@ import './ui.css';
 import { CORE_LEVELS, ERAS, FAMILY, MATERIALS, RES_INFO, RULES, rowOf, type Row } from './data';
 import {
   apPerTurn, buyPlot, buyablePlots, byId, cardItems, chooseCard, economy, endTurn, fits, groupOf, levelCap, moveCost,
-  move, nameOfB, newGame, planMerge, ownedCount, plotAp, plotQuota, previewMove, resourceRatios, rotate, rowOfB, sellBuilding, sellWarehouse,
+  mergeCap, move, nameOfB, newGame, planMerge, ownedCount, plotAp, plotQuota, previewMove, resourceRatios, rotate, rowOfB, sellBuilding, sellWarehouse,
   type Building, type State,
 } from './game';
 
@@ -71,7 +71,7 @@ function render() {
     <div class="stat"><span>人口</span><b>${fmt(s.pop)}</b><i>安居 ${fmt(e.settled)}${CORE_LEVELS[s.coreLevel + 1] ? ` / 升级 ${fmt(CORE_LEVELS[s.coreLevel + 1].settled * (s.coreLevel + 1 >= 3 ? RULES.coreSettledMult : 1))}` : ''}</i></div>
     <div class="stat"><span>行动力</span><b>${s.ap}</b><i>每大回合 +${apPerTurn(s) * RULES.turnsPerRound}</i></div>
     <div class="stat"><span>幸福（人均）</span><b class="${e.happyRatio < 0 ? 'neg' : ''}">${e.happyRatio.toFixed(2)}</b><i>${tiers}${s.danger ? ` · <span class="neg">危险 ${s.danger}/${RULES.failTurns}</span>` : ''}</i></div>
-    <div class="stat"><span>地块</span><b>${ownedCount(s)}/${plotQuota(s)}</b><i>最高等级 Lv${levelCap(s)}</i></div>
+    <div class="stat"><span>地块</span><b>${ownedCount(s)}/${plotQuota(s)}</b><i>最高合到 Lv${mergeCap(s)}</i></div>
     <div class="btns"><button id="newGame">新开一局</button></div>
   </header>
   <div class="lights">${lights}</div>
@@ -101,7 +101,7 @@ function render() {
 function selPanel(b: Building, run: number) {
   const g = b.core ? [] : groupOf(s, b);
   const row = rowOfB(b);
-  const next = !b.core && b.lvl < levelCap(s) ? rowOf(b.fam, b.lvl + 1) : null;
+  const next = !b.core && b.lvl < mergeCap(s) ? rowOf(b.fam, b.lvl + 1) : null;
   return `<div class="selb"><b>${b.core ? '🏛️' : FAMILY[b.fam].icon} ${nameOfB(b)}</b> Lv${b.lvl}
     <div>收支：${rowText(row)}${run < 0.999 ? ` <span class="neg">开工 ${(run * 100).toFixed(0)}%</span>` : ''}</div>
     ${next ? `<div class="dim">合成 Lv${b.lvl + 1}：${rowText(next)}</div>` : ''}
@@ -130,7 +130,7 @@ function boardHtml() {
     if (b.core || why.has(b.id)) continue;
     const g = groupOf(s, b);
     if (g.length < 3) continue;
-    const r = b.lvl + 1 > levelCap(s) ? `cap|已到等级上限 Lv${levelCap(s)}，村庄中心升级后自动合并` : planMerge(s, b, 0, false) ? 'go|可以合并：点一下选中后按“原地合并”' : 'room|合成后的建筑放不下，腾出空地后再合';
+    const r = b.lvl + 1 > mergeCap(s) ? `cap|已到合并上限 Lv${mergeCap(s)}，村庄中心升级或进入新时代后自动合并` : planMerge(s, b, 0, false) ? 'go|可以合并：点一下选中后按“原地合并”' : 'room|合成后的建筑放不下，腾出空地后再合';
     for (const x of g) why.set(x.id, r);
   }
   for (const b of s.buildings) {
@@ -200,7 +200,7 @@ function ghostAt(ev: PointerEvent) {
   const ok = fits(s, x, y, w, h, new Set([b.id]));
   const c = moveCost(b);
   let label = ok ? `${c} 点` : '放不下';
-  if (ok) { const p = previewMove(s, b.id, x, y, drag.rot); if (p.err) label = p.err; else if (p.merges.length) label = `${c} 点 · 合并→Lv${p.merges[p.merges.length - 1].to}`; else if (b.lvl + 1 > levelCap(s) && wouldTouch3(b, x, y, w, h)) label = `${c} 点 · 已到等级上限，暂不合并`; }
+  if (ok) { const p = previewMove(s, b.id, x, y, drag.rot); if (p.err) label = p.err; else if (p.merges.length) label = `${c} 点 · 合并→Lv${p.merges[p.merges.length - 1].to}`; else if (b.lvl + 1 > mergeCap(s) && wouldTouch3(b, x, y, w, h)) label = `${c} 点 · 已到等级上限，暂不合并`; }
   Object.assign(g.style, { display: 'flex', left: `${(x - view.x0) * cell}px`, top: `${(y - view.y0) * cell}px`, width: `${w * cell}px`, height: `${h * cell}px` });
   g.className = ok && s.ap >= c ? 'ok' : 'bad';
   g.textContent = label;

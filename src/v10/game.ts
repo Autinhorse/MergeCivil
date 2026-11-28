@@ -294,10 +294,16 @@ export function planMerge(s: State, anchor: Building, combo: number, landing: bo
   const group = groupOf(s, anchor);
   if (group.length < MERGE.count) return null;
   let to = anchor.lvl + 1;
-  const cap = levelCap(s);
-  if (to > cap) return null;
+  const cap = mergeCap(s);
+  // 软上限：超过上限 overCapMax 级以内也能合，但每次额外花 overCapAP × 合成后占地格数 的行动力
+  let extra = 0;
+  if (to > cap) {
+    if (to > cap + RULES.overCapMax || landing) return null;
+    extra = RULES.overCapAP * cells({ w: footprint(to)[0], h: footprint(to)[1] });
+    if (s.ap < extra) return null;
+  }
   // 一次合满 maxGroup 座直接升 2 级；升不了 2 级就只合 3 座，剩下的留在原地
-  const jump = group.length >= MERGE.maxGroup && to + 1 <= cap;
+  const jump = group.length >= MERGE.maxGroup && to + 1 <= cap && !extra;
   if (jump) to++;
   const used = group.slice(0, jump ? MERGE.maxGroup : MERGE.count);
   const ids = used.map((u) => u.id);
@@ -305,8 +311,10 @@ export function planMerge(s: State, anchor: Building, combo: number, landing: bo
   if (!spot) return null;
   const pay = RULES.mergeRefund && (!landing || RULES.refundOnLanding);
   const refund = pay ? Math.floor(cells(anchor) * RULES.refundMult * (1 + used.length - MERGE.count) * (combo > 0 ? RULES.comboMult : 1)) : 0;
-  return { ids, used: used.length, fam: anchor.fam, from: anchor.lvl, to, spot, refund, combo };
+  return { ids, used: used.length, fam: anchor.fam, from: anchor.lvl, to, spot, refund: refund - extra, combo };
 }
+/** 合并的等级上限（2026-11-28 Rex：只看村庄中心太死）：capMode 'core' = 村庄中心等级 + mergeCapOffset；'era' = max(村庄中心等级, 时代 + 2) */
+export const mergeCap = (s: State) => Math.min(FOOTPRINTS.length, RULES.capMode === 'era' ? Math.max(levelCap(s), s.era + 2) : levelCap(s) + RULES.mergeCapOffset);
 
 /** 以 anchor 为起点自动合并（含连锁） */
 export function autoMerge(s: State, anchor: Building, landing = false): MergeStep[] {
