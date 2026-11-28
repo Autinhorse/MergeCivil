@@ -19,6 +19,7 @@ if (process.env.SET)
     const [k0, v] = kv.split('=');
     // CORE.xxx 改村庄中心相关参数（比如 CORE.plotsPerLevel=2），其余改 RULES
     const [obj, k] = k0.startsWith('CORE.') ? [CORE as unknown as Record<string, unknown>, k0.slice(5)] : k0.startsWith('MERGE.') ? [MERGE as unknown as Record<string, unknown>, k0.slice(6)] : [R, k0];
+    if (k0.startsWith('MIX.')) { RULES.needMix[k0.slice(4)] = Number(v); continue; } // MIX.food=1.5
     if (k0.startsWith('W.')) { const f = FAMILY[k0.slice(2)]; if (!f) throw new Error(`没有建筑 ${k0}`); f.weight = Number(v); continue; } // W.house=2 改出现权重
     if (!(k in obj)) throw new Error(`没有参数 ${k0}`);
     obj[k] = v === 'true' ? true : v === 'false' ? false : isNaN(Number(v)) ? v : Number(v);
@@ -505,6 +506,15 @@ function summary(rs: Result[], label: string) {
       return tot[0] ? `大回合 ${lab}：有黄 ${pct(tot[1] / tot[0])} 有红 ${pct(tot[2] / tot[0])} 两红 ${pct(tot[3] / tot[0])}` : '';
     }).filter(Boolean);
     console.log(`  压力曲线：${pp.join('；')}`);
+    if (process.env.RATIO) {
+      const keys = ['housing', 'food', 'happy', 'goods', 'wood', 'copper', 'iron', 'coal', 'power'];
+      const line: string[] = [];
+      for (const r0 of [5, 10, 15, 20, 25, 30, 40, 50]) {
+        const vals = keys.map((k) => { const v = rs.map((x) => (x.stats as unknown as { ratios?: Record<string, number>[] }).ratios?.[r0]?.[k]).filter((v): v is number => v !== undefined && isFinite(v)); return v.length ? `${k}${(v.reduce((a, b) => a + b, 0) / v.length).toFixed(2)}` : ''; }).filter(Boolean);
+        line.push(`R${r0}: ${vals.join(' ')}`);
+      }
+      console.log('  最低供需比：\n    ' + line.join('\n    '));
+    }
     const dds = rs.map((r) => (r.stats as unknown as { dda?: number[] }).dda ?? []).filter((x) => x.length);
     if (dds.length) console.log(`  后台难度（发卡量倍数）：平均 ${avg(dds.map((x) => avg(x))).toFixed(2)}，最低 ${Math.min(...dds.flat()).toFixed(2)}，最高 ${Math.max(...dds.flat()).toFixed(2)}`);
   }

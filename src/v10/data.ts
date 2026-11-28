@@ -184,6 +184,10 @@ export const RULES = {
   popPerTurn: 0.08,
   popRate: 0.02, // 按比例增长：每回合 + 当前人口 × popRate（比如 0.03 = 3%）
   foodPerPerson: 1,
+  needMult: 1, // 每人需求（粮食/住房/幸福/生活用品）整体倍数，1 = 不变
+  needMultFrom: 5, // 从第几个大回合开始加
+  needMultRamp: 10, // 用几个大回合加满
+  needMix: { housing: 1.5, food: 1.8, happy: 0.7, goods: 1.5 } as Record<string, number>, // needMult 多出来的部分按项再乘：幸福本来就最紧，少加；粮食最松，多加
   needPerLevel: 1.12, // 每人需求随村庄中心等级放大：× needPerLevel^(等级 − needFromLevel)。1 = 不变
   needFromLevel: 2, // 从村庄中心第几级开始放大
   // 幸福度（生命值）：= 作坊幸福 + 建筑自带幸福 − 人口 × 每人需求 − 扣分

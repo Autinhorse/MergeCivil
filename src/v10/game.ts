@@ -719,14 +719,19 @@ export function economy(s: State, pop = s.pop): Economy {
     }
   }
   // 2026-11-28 Rex：后期压力越来越大。每人的粮食/住房/幸福/生活用品需求 × needPerLevel^(村庄中心等级 − 1)（住房按“每人要住得更大”算：容量 ÷ 这个数）
-  const sc = Math.pow(RULES.needPerLevel, Math.max(0, s.coreLevel - RULES.needFromLevel));
-  housing /= sc;
-  const foodNeed = pop * RULES.foodPerPerson * sc;
-  const fed = Math.min(pop, foodProd / (RULES.foodPerPerson * sc));
+  // needMult：整体再乘一个倍数，从第 needMultFrom 个大回合起用 needMultRamp 个大回合慢慢加满（前期不受影响）
+  const rnd = (s.turn - 1) / RULES.turnsPerRound + 1;
+  const nm = 1 + (RULES.needMult - 1) * Math.max(0, Math.min(1, (rnd - RULES.needMultFrom) / Math.max(1, RULES.needMultRamp)));
+  const sc = Math.pow(RULES.needPerLevel, Math.max(0, s.coreLevel - RULES.needFromLevel)) * nm;
+  // 各项再按 needMix 分开加（让四样东西差不多一起紧）：nm 部分乘上 needMix.x
+  const mx = (k: 'housing' | 'food' | 'happy' | 'goods') => sc * (1 + (nm - 1) * (RULES.needMix[k] ?? 1)) / nm;
+  housing /= mx('housing');
+  const foodNeed = pop * RULES.foodPerPerson * mx('food');
+  const fed = Math.min(pop, foodProd / (RULES.foodPerPerson * mx('food')));
   const hungry = Math.max(0, pop - fed);
   const homeless = Math.max(0, pop - housing);
-  const happyNeed = pop * happyPerPerson(s) * sc;
-  const goodsNeed = pop * goodsPerPerson(s) * sc;
+  const happyNeed = pop * happyPerPerson(s) * mx('happy');
+  const goodsNeed = pop * goodsPerPerson(s) * mx('goods');
   // 生活用品不够：缺的那部分按“缺几个人的份”扣幸福
   const goodsShort = goodsNeed > 0 ? Math.max(0, pop * (1 - goodsProd / goodsNeed)) : 0;
   const happyPenalty = homeless * RULES.homelessPenalty + hungry * RULES.hungerPenalty + goodsShort * RULES.goodsPenalty;
@@ -855,6 +860,10 @@ function resolveSmallTurn(s: State): TurnReport {
     const pr = ((s.stats as unknown as { pressure?: Record<string, number[]> }).pressure ??= {});
     const row = (pr[ph] ??= [0, 0, 0, 0]);
     row[0]++; if (ys) row[1]++; if (reds) row[2]++; if (reds >= 2) row[3]++;
+    // 每个大回合各资源的最低 供给÷需求（调参用）
+    const rr = ((s.stats as unknown as { ratios?: Record<string, number>[] }).ratios ??= []);
+    const cur = (rr[round] ??= {});
+    for (const [k, v] of Object.entries(resourceRatios(s, e))) cur[k] = Math.min(cur[k] ?? Infinity, v);
   }
   // 失败线
   if (e.happyRatio < RULES.failLine) { s.danger++; s.stats.dangerTurns++; } else s.danger = 0;
