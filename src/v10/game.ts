@@ -847,6 +847,7 @@ function resolveSmallTurn(s: State): TurnReport {
     for (const [k, v] of Object.entries(L)) { const c = (lc[k] ??= { g: 0, y: 0, r: 0 }); c[v]++; }
     // 只看本回合产出、不算库存的灯（调参用）
     const lp = ((s.stats as unknown as { lightsProd?: Record<string, Record<Light, number>> }).lightsProd ??= {});
+    if (e.matDemand.power > 1e-6 && e.matProd.power + s.res.power < e.matDemand.power) { const st = s.stats as unknown as { pwRed?: number; pwRedNoPlant?: number }; st.pwRed = (st.pwRed ?? 0) + 1; if (e.matProd.power < 1e-6) st.pwRedNoPlant = (st.pwRedNoPlant ?? 0) + 1; }
     for (const k of MATERIALS) if (e.matDemand[k] > 1e-6) { const r = e.matProd[k] / e.matDemand[k]; const v: Light = r >= RULES.lightGreen ? 'g' : r >= 1 ? 'y' : 'r'; const c = (lp[k] ??= { g: 0, y: 0, r: 0 }); c[v]++; }
     // 压力曲线：按大回合分段，记“有黄（或更差）/ 有红 / 两项以上红”的回合数
     const reds = Object.values(L).filter((v) => v === 'r').length, ys = Object.values(L).filter((v) => v !== 'g').length;

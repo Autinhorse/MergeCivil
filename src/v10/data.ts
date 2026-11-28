@@ -187,7 +187,7 @@ export const RULES = {
   needMult: 2.5, // 每人需求（粮食/住房/幸福/生活用品）整体倍数，1 = 不变
   needMultFrom: 5, // 从第几个大回合开始加
   needMultRamp: 10, // 用几个大回合加满
-  prodMult: { housing: 1, food: 1, happy: 1, power: 1.5 } as Record<string, number>, // 建筑基础产量倍数（按产出项，村庄中心不算）
+  prodMult: { housing: 1, food: 1, happy: 1, power: 2, iron: 0.6 } as Record<string, number>, // 建筑基础产量倍数（按产出项，村庄中心不算）
   needMix: { housing: 1.5, food: 1.8, happy: 0.7, goods: 1.5 } as Record<string, number>, // needMult 多出来的部分按项再乘：幸福本来就最紧，少加；粮食最松，多加
   needPerLevel: 1.08, // 每人需求随村庄中心等级放大：× needPerLevel^(等级 − needFromLevel)。1 = 不变
   needFromLevel: 2, // 从村庄中心第几级开始放大

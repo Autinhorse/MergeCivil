@@ -569,6 +569,7 @@ if (seedArg) {
   console.log(`v10 模拟：${N} 局 × ${bots.length} 种机器人，最多 ${TURNS} 回合${process.env.SET ? `，改动 ${process.env.SET}` : ''}`);
   for (const bot of bots) {
     const rs = Array.from({ length: N }, (_, i) => play(bot, i + 1));
+    if (process.env.PW) { const a = rs.map((x) => x.stats as unknown as { pwRed?: number; pwRedNoPlant?: number }); console.log(`  电红回合 ${a.reduce((t, x) => t + (x.pwRed ?? 0), 0) / N}，其中一座电厂都没有 ${a.reduce((t, x) => t + (x.pwRedNoPlant ?? 0), 0) / N}`); }
     all.push(...rs.map((r) => ({ ...r, inf: false })));
     summary(rs, `${bot} · ${BOT_NAME[bot]}`);
     if (!process.env.NOINF) {
