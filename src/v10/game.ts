@@ -295,7 +295,7 @@ export function planMerge(s: State, anchor: Building, combo: number, landing: bo
   const spot = landingSpot(s, { fam: anchor.fam, lvl: to }, anchor, new Set(ids), true);
   if (!spot) return null;
   const pay = RULES.mergeRefund && (!landing || RULES.refundOnLanding);
-  const refund = pay ? cells(anchor) * (1 + used.length - MERGE.count) * (combo > 0 ? RULES.comboMult : 1) : 0;
+  const refund = pay ? Math.floor(cells(anchor) * RULES.refundMult * (1 + used.length - MERGE.count) * (combo > 0 ? RULES.comboMult : 1)) : 0;
   return { ids, used: used.length, fam: anchor.fam, from: anchor.lvl, to, spot, refund, combo };
 }
 
@@ -788,7 +788,13 @@ export function endTurn(s: State): TurnReport {
 export type Light = 'g' | 'y' | 'r';
 export function resourceLights(s: State, e = economy(s)): Record<string, Light> {
   const out: Record<string, Light> = {};
-  const put = (k: string, sup: number, dem: number) => { if (dem > 1e-6) { const r = sup / dem; out[k] = r >= RULES.lightGreen ? 'g' : r >= 1 ? 'y' : 'r'; } };
+  for (const [k, r] of Object.entries(resourceRatios(s, e))) out[k] = r >= RULES.lightGreen ? 'g' : r >= 1 ? 'y' : 'r';
+  return out;
+}
+/** 各项资源的 供给 ÷ 需求（同上） */
+export function resourceRatios(s: State, e = economy(s)): Record<string, number> {
+  const out: Record<string, number> = {};
+  const put = (k: string, sup: number, dem: number) => { if (dem > 1e-6) out[k] = sup / dem; };
   put('housing', e.housing, s.pop);
   put('food', e.foodProd, e.foodNeed);
   put('happy', e.happyProd + e.happyBuildings, e.happyNeed);

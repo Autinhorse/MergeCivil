@@ -8,7 +8,7 @@
 import { writeFileSync } from 'node:fs';
 import { CORE, CORE_LEVELS, ERAS, FAMILIES, FAMILY, MATERIALS, MERGE, RES_INFO, RULES, startBase, lv1Row } from '../src/v10/data';
 import {
-  buyPlot, buyablePlots, cardItems, resourceLights, hooks, footprint, ownedBounds, byId, cellOwned, type Item, cells, chooseCard, economy, endTurn, fits, freeCells, groupOf, levelCap, moveCost, move, needs,
+  buyPlot, buyablePlots, cardItems, resourceLights, resourceRatios, hooks, footprint, ownedBounds, byId, cellOwned, type Item, cells, chooseCard, economy, endTurn, fits, freeCells, groupOf, levelCap, moveCost, move, needs,
   newGame, occupancy, ownedCount, plotAp, plotQuota, previewMove, sellWarehouse, touching, type Building, type Card, type State,
 } from '../src/v10/game';
 
@@ -154,6 +154,8 @@ function pickCard(s: State, bot: Bot): number {
 }
 
 const LIGHTS = process.env.LIGHTS !== '0';
+const PICK = process.env.PICK ?? 'priority'; // priority = Rex 的规则；old = 合并次数×10+返还−花费
+const PRI_RED = Number(process.env.PRI_RED ?? 100), PRI_RED_BASE = Number(process.env.PRI_RED_BASE ?? 20), PRI_YELLOW = Number(process.env.PRI_YELLOW ?? 10);
 const LIGHT_RED = Number(process.env.LIGHT_RED ?? 30), LIGHT_YELLOW = Number(process.env.LIGHT_YELLOW ?? 10);
 function doMerges(s: State, bot: Bot, tl: TurnLog) {
   if (bot === 'novice') return;
@@ -184,6 +186,36 @@ function doMerges(s: State, bot: Bot, tl: TurnLog) {
         for (const [k, l] of bad) if ((row[k] ?? 0) > 0) v += l === 'r' ? LIGHT_RED : LIGHT_YELLOW;
         return v;
       };
+      if (PICK === 'priority') {
+        // 2026-11-28 Rex 的规则：① 净赚行动力（返还 > 花费）最多的 ② 不亏的 ③ 都亏时：红色资源按缺口大小、黄色按离变红多近打分，分高的先合；
+        // 都是绿的（没分）就挑亏得最少的
+        const ratios = resourceRatios(s);
+        const urgency = (c: MoveOpt) => {
+          const b = byId(s, c.id)!;
+          const row = lv1Row(b.fam, b.lvl + 1) as Record<string, number | undefined>;
+          let u = 0;
+          for (const [k, r] of Object.entries(ratios)) {
+            if ((row[k] ?? 0) <= 0) continue;
+            if (r < 1) u += PRI_RED * (1 - r) + PRI_RED_BASE; // 红：差得越多越优先
+            else if (r < RULES.lightGreen) u += PRI_YELLOW * (RULES.lightGreen - r) / (RULES.lightGreen - 1); // 黄：越接近变红越高
+          }
+          return u;
+        };
+        const pool = [...ok].sort((a, b) => fix(b) - fix(a) || a.cost - b.cost).slice(0, 16);
+        const ev = pool.map((c) => {
+          const pv = previewMove(s, c.id, c.x, c.y, c.rot);
+          return { c, net: pv.merges.reduce((a, m) => a + m.refund, 0) - c.cost, n: pv.merges.length, u: urgency(c) };
+        });
+        const gain = ev.filter((x) => x.net > 0).sort((a, b) => b.net - a.net || b.n - a.n);
+        const even = ev.filter((x) => x.net === 0).sort((a, b) => b.u - a.u || b.n - a.n);
+        const loss = ev.filter((x) => x.net < 0).sort((a, b) => b.u - a.u || b.net - a.net);
+        const best = gain[0] ?? even[0] ?? loss[0];
+        { const pc = ((s.stats as unknown as { pick?: Record<string, number> }).pick ??= {}); const tier = gain.length ? 'gain' : even.length ? 'even' : best.u > 0 ? 'lossFix' : 'loss'; pc[tier] = (pc[tier] ?? 0) + 1; pc.opts = (pc.opts ?? 0) + ev.length; pc.n = (pc.n ?? 0) + 1; if (ev.some((x) => x.u > 0)) pc.anyU = (pc.anyU ?? 0) + 1; }
+        // 亏行动力、又不补任何红黄资源的合并：留够买地的钱才做
+        if (!gain.length && !even.length && best.u <= 0 && best.c.cost > s.ap - plotReserve(s)) return;
+        move(s, best.c.id, best.c.x, best.c.y, best.c.rot);
+        continue;
+      }
       const cand = [...ok].sort((a, b) => fix(b) - fix(a) || a.cost - b.cost).slice(0, 8);
       let bestV = -Infinity;
       pick = cand[0];
@@ -423,6 +455,8 @@ function summary(rs: Result[], label: string) {
       if (n) parts.push(`${nm[k]} ${pct(g / n)}/${pct(y / n)}/${pct(r / n)}`);
     }
     console.log(`  资源绿/黄/红回合占比：${parts.join('，')}`);
+    const pk = (k: string) => f1(avg(rs.map((r) => (r.stats as unknown as { pick?: Record<string, number> }).pick?.[k] ?? 0)));
+    console.log(`  合并选择（每局）：决策 ${pk('n')} 次，平均每次可选 ${f1(Number(pk('opts')) / Math.max(1, Number(pk('n'))))} 种；选了净赚 ${pk('gain')}，不亏 ${pk('even')}，亏但补红黄 ${pk('lossFix')}，亏且全绿 ${pk('loss')}；有能补红黄的选项 ${pk('anyU')} 次`);
     const segs: [string, string][] = [['a', '1–10'], ['b', '11–30'], ['c', '31–60'], ['d', '61+']];
     const pp = segs.map(([k, lab]) => {
       const tot = [0, 0, 0, 0];
