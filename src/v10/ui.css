@@ -51,3 +51,9 @@ button.primary { background: #c9822e; border-color: #e09a45; font-weight: 700; }
 .over { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); background: #1f1b16; border: 2px solid #ef6f5c; padding: 20px 28px; border-radius: 10px; font-size: 18px; z-index: 20; }
 #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #1f1b16; border: 1px solid #6b5d4b; padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 30; }
 #toast.show { opacity: 1; }
+.bld .why { position: absolute; left: 2px; top: 2px; z-index: 2; font-size: 10px; min-width: 13px; height: 13px; line-height: 13px; text-align: center; border-radius: 4px; color: #fff; }
+.bld .why.cap { background: #7a6a55; }
+.bld .why.room { background: #c0573f; }
+.bld .why.go { background: #3f8f3a; animation: pulse 1s infinite alternate; }
+@keyframes pulse { from { opacity: .6; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .bld .why.go { animation: none; } }

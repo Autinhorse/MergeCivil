@@ -3,7 +3,7 @@ import './ui.css';
 import { CORE_LEVELS, ERAS, FAMILY, MATERIALS, RES_INFO, RULES, rowOf, type Row } from './data';
 import {
   apPerTurn, buyPlot, buyablePlots, byId, cardItems, chooseCard, economy, endTurn, fits, groupOf, levelCap, moveCost,
-  move, nameOfB, newGame, ownedCount, plotAp, plotQuota, previewMove, resourceRatios, rotate, rowOfB, sellBuilding, sellWarehouse,
+  move, nameOfB, newGame, planMerge, ownedCount, plotAp, plotQuota, previewMove, resourceRatios, rotate, rowOfB, sellBuilding, sellWarehouse,
   type Building, type State,
 } from './game';
 
@@ -124,12 +124,22 @@ function boardHtml() {
   }
   const grp = new Set(sel != null && byId(s, sel) && !byId(s, sel)!.core ? groupOf(s, byId(s, sel)!).map((b) => b.id) : []);
   const e = economy(s);
+  // 连成 3 座却没合的组：标出原因（到了等级上限 / 合成后的大建筑没地方放 / 系统补的零头要玩家点一下）
+  const why = new Map<number, string>();
+  for (const b of s.buildings) {
+    if (b.core || why.has(b.id)) continue;
+    const g = groupOf(s, b);
+    if (g.length < 3) continue;
+    const r = b.lvl + 1 > levelCap(s) ? `cap|已到等级上限 Lv${levelCap(s)}，村庄中心升级后自动合并` : planMerge(s, b, 0, false) ? 'go|可以合并：点一下选中后按“原地合并”' : 'room|合成后的建筑放不下，腾出空地后再合';
+    for (const x of g) why.set(x.id, r);
+  }
   for (const b of s.buildings) {
     const big = Math.min(b.w, b.h) * cell;
+    const w = why.get(b.id)?.split('|');
     const idle = (e.run[b.id] ?? 1) < 0.999;
     parts.push(`<div class="bld ${b.id === sel ? 'sel' : ''} ${grp.has(b.id) ? 'grp' : ''} ${idle ? 'idle' : ''}" data-id="${b.id}" style="left:${px(b.x, view.x0)}px;top:${px(b.y, view.y0)}px;width:${b.w * cell}px;height:${b.h * cell}px;--c:${color(b)}">
       <span class="ic" style="font-size:${Math.max(12, Math.min(big * 0.55, 44))}px">${b.core ? '🏛️' : FAMILY[b.fam].icon}</span>
-      ${big >= 36 ? `<span class="nm">${nameOfB(b)}</span>` : ''}<span class="lv">${b.lvl}</span></div>`);
+      ${big >= 36 ? `<span class="nm">${nameOfB(b)}</span>` : ''}<span class="lv">${b.lvl}</span>${w ? `<span class="why ${w[0]}" title="${w[1]}">${w[0] === 'go' ? '⇪' : w[0] === 'cap' ? '⏸' : '⛶'}</span>` : ''}</div>`);
   }
   parts.push('<div id="ghost"></div>');
   return parts.join('');
@@ -190,13 +200,19 @@ function ghostAt(ev: PointerEvent) {
   const ok = fits(s, x, y, w, h, new Set([b.id]));
   const c = moveCost(b);
   let label = ok ? `${c} 点` : '放不下';
-  if (ok) { const p = previewMove(s, b.id, x, y, drag.rot); if (p.err) label = p.err; else if (p.merges.length) label = `${c} 点 · 合并→Lv${p.merges[p.merges.length - 1].to}`; }
+  if (ok) { const p = previewMove(s, b.id, x, y, drag.rot); if (p.err) label = p.err; else if (p.merges.length) label = `${c} 点 · 合并→Lv${p.merges[p.merges.length - 1].to}`; else if (b.lvl + 1 > levelCap(s) && wouldTouch3(b, x, y, w, h)) label = `${c} 点 · 已到等级上限，暂不合并`; }
   Object.assign(g.style, { display: 'flex', left: `${(x - view.x0) * cell}px`, top: `${(y - view.y0) * cell}px`, width: `${w * cell}px`, height: `${h * cell}px` });
   g.className = ok && s.ap >= c ? 'ok' : 'bad';
   g.textContent = label;
   document.querySelector<HTMLElement>(`.bld[data-id="${b.id}"]`)?.classList.add('dragging');
 }
 
+function wouldTouch3(b: Building, x: number, y: number, w: number, h: number) {
+  const tmp = { ...b, x, y, w, h };
+  const others = s.buildings.filter((o) => o.id !== b.id);
+  const copy = { ...s, buildings: [...others, tmp] } as State;
+  return groupOf(copy, tmp).length >= 3;
+}
 window.addEventListener('pointermove', (ev) => {
   if (!drag) return;
   if (!drag.moved && Math.hypot(ev.clientX - drag.sx, ev.clientY - drag.sy) < 5) return;
