@@ -6,9 +6,9 @@
 //   BOTS=normal,expert N=40 TURNS=250 npm run sim10
 //   NOINF=1 跳过无限行动力对比；CSV=out.csv 把每局结果写成表
 import { writeFileSync } from 'node:fs';
-import { CORE, CORE_LEVELS, ERAS, FAMILIES, FAMILY, MATERIALS, MERGE, RES_INFO, RULES, startBase } from '../src/v10/data';
+import { CORE, CORE_LEVELS, ERAS, FAMILIES, FAMILY, MATERIALS, MERGE, RES_INFO, RULES, startBase, lv1Row } from '../src/v10/data';
 import {
-  buyPlot, buyablePlots, cardItems, hooks, footprint, ownedBounds, byId, cellOwned, type Item, cells, chooseCard, economy, endTurn, fits, freeCells, groupOf, levelCap, moveCost, move, needs,
+  buyPlot, buyablePlots, cardItems, resourceLights, hooks, footprint, ownedBounds, byId, cellOwned, type Item, cells, chooseCard, economy, endTurn, fits, freeCells, groupOf, levelCap, moveCost, move, needs,
   newGame, occupancy, ownedCount, plotAp, plotQuota, previewMove, sellWarehouse, touching, type Building, type Card, type State,
 } from '../src/v10/game';
 
@@ -152,6 +152,8 @@ function pickCard(s: State, bot: Bot): number {
   return sc.indexOf(Math.max(...sc));
 }
 
+const LIGHTS = process.env.LIGHTS !== '0';
+const LIGHT_RED = Number(process.env.LIGHT_RED ?? 30), LIGHT_YELLOW = Number(process.env.LIGHT_YELLOW ?? 10);
 function doMerges(s: State, bot: Bot, tl: TurnLog) {
   if (bot === 'novice') return;
   for (let guard = 0; guard < 60; guard++) {
@@ -169,13 +171,24 @@ function doMerges(s: State, bot: Bot, tl: TurnLog) {
     let pick: MoveOpt;
     if (bot === 'normal') pick = ok.reduce((a, b) => (a.cost <= b.cost ? a : b));
     else {
-      // 熟练：预览最便宜的几个，选“合并次数 × 10 + 返还 − 花费”最高的
-      const cand = [...ok].sort((a, b) => a.cost - b.cost).slice(0, 8);
+      // 熟练：预览最便宜的几个，选“合并次数 × 10 + 返还 − 花费”最高的。
+      // 2026-11-28 Rex：资源有黄/红时，优先合能补这项资源的建筑（红 +LIGHT_RED，黄 +LIGHT_YELLOW）
+      const lights = LIGHTS ? resourceLights(s) : {};
+      const bad = Object.entries(lights).filter(([, v]) => v !== 'g');
+      const fix = (c: MoveOpt) => {
+        if (!bad.length) return 0;
+        const b = byId(s, c.id)!;
+        const row = lv1Row(b.fam, b.lvl + 1) as Record<string, number | undefined>;
+        let v = 0;
+        for (const [k, l] of bad) if ((row[k] ?? 0) > 0) v += l === 'r' ? LIGHT_RED : LIGHT_YELLOW;
+        return v;
+      };
+      const cand = [...ok].sort((a, b) => fix(b) - fix(a) || a.cost - b.cost).slice(0, 8);
       let bestV = -Infinity;
       pick = cand[0];
       for (const c of cand) {
         const pv = previewMove(s, c.id, c.x, c.y, c.rot);
-        const v = pv.merges.length * 10 + pv.merges.reduce((a, m) => a + m.refund, 0) - c.cost;
+        const v = pv.merges.length * 10 + pv.merges.reduce((a, m) => a + m.refund, 0) - c.cost + fix(c);
         if (v > bestV) { bestV = v; pick = c; }
       }
       if (pick.cost > s.ap - plotReserve(s) && bestV < 10) return;
@@ -347,10 +360,11 @@ function play(bot: Bot, seed: number, verbose = false): Result {
   if (s.over) {
     const e = lastEcon;
     const short = Math.max(0, e.happyNeed - e.happyProd - e.happyBuildings);
-    const total = short + e.homeless * RULES.homelessPenalty + e.hungry * RULES.hungerPenalty || 1;
+    const total = short + e.homeless * RULES.homelessPenalty + e.hungry * RULES.hungerPenalty + e.goodsShort * RULES.goodsPenalty || 1;
     deathMix['幸福供不上'] = short / total;
     deathMix['无家可归'] = (e.homeless * RULES.homelessPenalty) / total;
     deathMix['缺粮'] = (e.hungry * RULES.hungerPenalty) / total;
+    deathMix['缺生活用品'] = (e.goodsShort * RULES.goodsPenalty) / total;
     const ap = recent.filter((x) => x.apBlocked || x.plotBlocked).length;
     const quota = recent.filter((x) => x.quotaBlocked).length;
     cause = ap >= 3 ? '行动力不够' : quota >= 3 ? '地块额度满（村庄中心没升级）' : '建筑/原料跟不上';
@@ -398,6 +412,17 @@ function summary(rs: Result[], label: string) {
     console.log(`  仓库峰值：平均 ${f1(avg(wp))} 座，最多 ${Math.max(...wp)} 座；峰值出现的时代 ${Object.entries(we).map(([k, v]) => `${k}${v}局`).join('，')}`);
     console.log(`  丢弃原因（每局）：共 ${f1(avg(rs.map((r) => r.stats.lost)))} 座 = 地块额度满/没地可买 ${lw('quota')} + 有地可买但行动力不够 ${lw('ap')} + 买得起但没先买 ${lw('notBought')}；其中空格总数其实够、只是碎了放不下 ${lw('fragmented')}，建筑比仓库还大 ${lw('tooBigForWarehouse')}`);
   }
+  {
+    const nm: Record<string, string> = { housing: '住房', food: '粮食', happy: '幸福', goods: '生活用品', ...Object.fromEntries(MATERIALS.map((k) => [k, RES_INFO[k].name])) };
+    const parts: string[] = [];
+    for (const k of Object.keys(nm)) {
+      let g = 0, y = 0, r = 0;
+      for (const x of rs) { const c = (x.stats as unknown as { lights?: Record<string, Record<string, number>> }).lights?.[k]; if (c) { g += c.g; y += c.y; r += c.r; } }
+      const n = g + y + r;
+      if (n) parts.push(`${nm[k]} ${pct(g / n)}/${pct(y / n)}/${pct(r / n)}`);
+    }
+    console.log(`  资源绿/黄/红回合占比：${parts.join('，')}`);
+  }
   console.log(`  ★ 每局一共出现建筑 ${f1(avg(rs.map((r) => r.stats.arrived + RULES.startBuildings.length)))} 座（开局 ${RULES.startBuildings.length} + 选卡 ${f1(avg(rs.map((r) => r.stats.arrived - (r.stats.autoFilled ?? 0))))} + 自动补齐 ${f1(avg(rs.map((r) => r.stats.autoFilled ?? 0)))}），合并 ${f1(avg(rs.map((r) => r.stats.merges + r.stats.landingMerges)))} 次（每大回合 ${f1(avg(rs.map((r) => (r.stats.merges + r.stats.landingMerges) / Math.max(1, r.rounds))))}；手动 ${f1(avg(rs.map((r) => r.stats.merges)))} + 落地自动 ${f1(avg(rs.map((r) => r.stats.landingMerges)))}），局末剩 ${f1(avg(rs.map((r) => r.buildings)))} 座`);
   console.log(`  每局：手动合并 ${f1(avg(rs.map((r) => r.stats.merges)))}，落地自动合并 ${f1(avg(rs.map((r) => r.stats.landingMerges)))}，连锁 ${f1(avg(rs.map((r) => r.stats.combos)))}，来了 ${f1(avg(rs.map((r) => r.stats.arrived)))} 座，进仓库 ${f1(avg(rs.map((r) => r.stats.toWarehouse)))}，丢掉 ${f1(avg(rs.map((r) => r.stats.lost)))}，卖出 ${f1(avg(rs.map((r) => r.stats.sold)))}`);
   const keys = ['housing', 'food', 'happy', ...MATERIALS];
@@ -422,7 +447,7 @@ function summary(rs: Result[], label: string) {
     const causes: Record<string, number> = {};
     for (const r of dead) causes[r.cause] = (causes[r.cause] ?? 0) + 1;
     console.log(`  输因：${Object.entries(causes).map(([k, v]) => `${k} ${v}`).join('，')}`);
-    const mix = ['幸福供不上', '无家可归', '缺粮'].map((k) => `${k} ${pct(avg(dead.map((r) => r.deathMix[k] ?? 0)))}`);
+    const mix = ['幸福供不上', '无家可归', '缺粮', '缺生活用品'].map((k) => `${k} ${pct(avg(dead.map((r) => r.deathMix[k] ?? 0)))}`);
     console.log(`  死前一回合幸福缺口构成：${mix.join('，')}`);
   }
 }

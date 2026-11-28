@@ -767,6 +767,22 @@ export function endTurn(s: State): TurnReport {
   return rep!;
 }
 
+/**
+ * 各项资源的红黄绿（2026-11-28 Rex）：供给 ÷ 需求 ≥ 1.1 绿，≥ 1 黄，< 1 红。
+ * 原料的供给 = 本回合产出 + 库存 ÷ 3（库存还能撑几回合也算一点）。没有需求的不算。
+ */
+export type Light = 'g' | 'y' | 'r';
+export function resourceLights(s: State, e = economy(s)): Record<string, Light> {
+  const out: Record<string, Light> = {};
+  const put = (k: string, sup: number, dem: number) => { if (dem > 1e-6) { const r = sup / dem; out[k] = r >= RULES.lightGreen ? 'g' : r >= 1 ? 'y' : 'r'; } };
+  put('housing', e.housing, s.pop);
+  put('food', e.foodProd, e.foodNeed);
+  put('happy', e.happyProd + e.happyBuildings, e.happyNeed);
+  put('goods', e.goodsProd, e.goodsNeed);
+  for (const k of MATERIALS) put(k, e.matProd[k] + s.res[k] / 3, e.matDemand[k]);
+  return out;
+}
+
 /** 一个小回合的结算：生产、幸福、失败线、村庄中心升级、人口增长 */
 function resolveSmallTurn(s: State): TurnReport {
   const e = economy(s);
@@ -780,6 +796,10 @@ function resolveSmallTurn(s: State): TurnReport {
   if (e.goodsShort > 0) g.goods = (g.goods ?? 0) + 1;
   if (e.happyProd + e.happyBuildings < e.happyNeed) g.happy = (g.happy ?? 0) + 1;
   for (const k of MATERIALS) if (e.matDemand[k] > 0 && e.matUsed[k] < e.matDemand[k] - 1e-6) g[k] = (g[k] ?? 0) + 1;
+  {
+    const lc = ((s.stats as unknown as { lights?: Record<string, Record<Light, number>> }).lights ??= {});
+    for (const [k, v] of Object.entries(resourceLights(s, e))) { const c = (lc[k] ??= { g: 0, y: 0, r: 0 }); c[v]++; }
+  }
   // 失败线
   if (e.happyRatio < RULES.failLine) { s.danger++; s.stats.dangerTurns++; } else s.danger = 0;
   if (s.danger >= RULES.failTurns) {

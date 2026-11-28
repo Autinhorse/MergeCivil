@@ -202,6 +202,7 @@ export const RULES = {
   startScale: 0.5,
   // 发卡时缺“换产出才有”的原料（煤要伐木场 Lv8）：true = 直接发那一级；false = 照常发卡片等级，玩家自己合上去
   stageJump: true,
+  lightGreen: 1.1, // 资源红黄绿：供给/需求 ≥ 这个数算绿，≥1 黄，<1 红
   homelessPenalty: 1, // 每个无家可归的人扣多少
   hungerPenalty: 1, // 每个吃不饱的人扣多少
   /** 分档。happyPerPop=true 时门槛按“幸福度 ÷ 人口”算（设计文档示意是绝对值 -10，人口上千后会太严，先按人均） */
